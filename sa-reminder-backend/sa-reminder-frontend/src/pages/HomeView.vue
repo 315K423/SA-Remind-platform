@@ -3,6 +3,6 @@
 
 <template>
   <main>
-    主页
+    主页用于存放ECharts图表
   </main>
 </template>

@@ -40,7 +40,7 @@ public class AuthInterceptor {
         User loginUser = userService.getLoginUser(request);
         UserRoleEnum mustRoleEnum = UserRoleEnum.getEnumByValue(mustRole);
         // 不需要权限，直接放行
-        if (mustRole == null) {
+        if (mustRole == null || mustRole.isBlank()) {
             return joinPoint.proceed();
         }
         // 以下的代码，必须有这个权限才能通行
