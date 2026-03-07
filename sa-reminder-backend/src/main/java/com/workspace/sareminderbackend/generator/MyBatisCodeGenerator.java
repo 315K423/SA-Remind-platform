@@ -1,4 +1,4 @@
-package com.workspace.sareminderbackend.controller.generator;
+package com.workspace.sareminderbackend.generator;
 
 
 import cn.hutool.core.lang.Dict;
