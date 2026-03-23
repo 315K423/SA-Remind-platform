@@ -54,6 +54,7 @@ create table if not exists schedule_event
     INDEX idx_endTime (endTime)
 ) comment '日程事件' collate = utf8mb4_unicode_ci;
 
+-- 日程提醒策略与弹窗提醒相关表
 create table if not exists schedule_participant
 (
     id              bigint                                 not null comment 'id' primary key,
@@ -68,3 +69,44 @@ create table if not exists schedule_participant
     UNIQUE KEY uk_schedule_user (scheduleId, userId),
     INDEX idx_userId (userId)
 ) comment '日程参与人' collate = utf8mb4_unicode_ci;
+
+
+create table if not exists schedule_reminder_rule
+(
+    id                    bigint                                 not null comment 'id' primary key,
+    scheduleId            bigint                                 not null comment '日程ID',
+    userId                bigint                                 not null comment '提醒所属用户ID',
+    remindOffsetMinutes   int          default 30                not null comment '首次提醒提前分钟数，例如 30 表示开始前30分钟',
+    repeatCount           int          default 0                 not null comment '重复次数（额外重复次数，0 表示仅提醒1次）',
+    repeatIntervalMinutes int          default 5                 not null comment '重复提醒间隔分钟数',
+    popupEnabled          tinyint      default 1                 not null comment '是否启用网页弹窗 0/1',
+    status                varchar(64)  default 'enabled'         not null comment '状态：enabled/disabled',
+    lastGenerateTime      datetime                               null comment '最近一次生成提醒任务时间',
+    createTime            datetime     default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime            datetime     default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete              tinyint      default 0                 not null comment '是否删除',
+    unique key uk_schedule_user (scheduleId, userId),
+    index idx_userId_status (userId, status),
+    index idx_scheduleId (scheduleId)
+) comment '日程提醒策略' collate = utf8mb4_unicode_ci;
+
+create table if not exists schedule_reminder_task
+(
+    id                 bigint                                 not null comment 'id' primary key,
+    ruleId             bigint                                 not null comment '提醒策略ID',
+    scheduleId         bigint                                 not null comment '日程ID',
+    userId             bigint                                 not null comment '提醒用户ID',
+    remindIndex        int                                    not null comment '第几次提醒，从0开始',
+    plannedRemindTime  datetime                               not null comment '计划提醒时间',
+    actualRemindTime   datetime                               null comment '实际触发时间',
+    taskStatus         varchar(64)  default 'pending'         not null comment '任务状态：pending/sent/read/expired',
+    popupTitle         varchar(256)                           not null comment '弹窗标题',
+    popupContent       varchar(1024)                          not null comment '弹窗内容',
+    readTime           datetime                               null comment '已读时间',
+    createTime         datetime     default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime         datetime     default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete           tinyint      default 0                 not null comment '是否删除',
+    unique key uk_rule_index (ruleId, remindIndex),
+    index idx_user_status_time (userId, taskStatus, plannedRemindTime),
+    index idx_scheduleId (scheduleId)
+) comment '日程提醒任务' collate = utf8mb4_unicode_ci;

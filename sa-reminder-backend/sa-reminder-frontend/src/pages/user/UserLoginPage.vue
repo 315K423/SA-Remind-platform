@@ -1,37 +1,40 @@
 <template>
-  <div id="userLoginPage">
-    <h2 class="title">日程安排与考勤系统 - 用户登录</h2>
-    <div class="desc">欢迎</div>
-    <a-form :model="formState" name="basic" autocomplete="off" @finish="handleSubmit">
-      <a-form-item name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
-        <a-input v-model:value="formState.userAccount" placeholder="请输入账号" />
-      </a-form-item>
-      <a-form-item
-        name="userPassword"
-        :rules="[
-          { required: true, message: '请输入密码' },
-          { min: 8, message: '密码不能小于 8 位' },
-        ]"
-      >
-        <a-input-password v-model:value="formState.userPassword" placeholder="请输入密码" />
-      </a-form-item>
-      <div class="tips">
-        没有账号？
-        <RouterLink to="/user/register">去注册</RouterLink>
+  <div class="auth-page">
+    <div class="auth-card">
+      <div class="header">
+        <img class="logo" src="@/assets/logo.png" alt="logo" />
+        <div>
+          <h2>用户登录</h2>
+          <p>欢迎进入企业日程与考勤智能提醒平台</p>
+        </div>
       </div>
-      <a-form-item>
-        <a-button type="primary" html-type="submit" style="width: 100%">登录</a-button>
-      </a-form-item>
-    </a-form>
+      <a-form :model="formState" layout="vertical" autocomplete="off" @finish="handleSubmit">
+        <a-form-item label="账号" name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
+          <a-input v-model:value="formState.userAccount" placeholder="请输入账号" size="large" />
+        </a-form-item>
+        <a-form-item
+          label="密码"
+          name="userPassword"
+          :rules="[
+            { required: true, message: '请输入密码' },
+            { min: 8, message: '密码不能小于 8 位' },
+          ]"
+        >
+          <a-input-password v-model:value="formState.userPassword" placeholder="请输入密码" size="large" />
+        </a-form-item>
+        <div class="tips">没有账号？<RouterLink to="/user/register">去注册</RouterLink></div>
+        <a-button type="primary" html-type="submit" block size="large">登录</a-button>
+      </a-form>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import {reactive} from "vue";
-import {useRouter} from "vue-router";
-import {useLoginUserStore} from "@/stores/loginUser.ts";
-import {userLogin} from "@/api/userController.ts";
-import {message} from "ant-design-vue";
+import { reactive } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useLoginUserStore } from '@/stores/loginUser'
+import { userLogin } from '@/api/userController'
+import { message } from 'ant-design-vue'
 
 const formState = reactive<API.UserLoginRequest>({
   userAccount: '',
@@ -39,51 +42,57 @@ const formState = reactive<API.UserLoginRequest>({
 })
 
 const router = useRouter()
+const route = useRoute()
 const loginUserStore = useLoginUserStore()
 
-/**
- * 提交表单
- * @param values
- */
-const handleSubmit = async (values: any) => {
+const handleSubmit = async (values: API.UserLoginRequest) => {
   const res = await userLogin(values)
-  // 登录成功，把登录态保存到全局状态中
   if (res.data.code === 0 && res.data.data) {
     await loginUserStore.fetchLoginUser()
     message.success('登录成功')
-    router.push({
-      path: '/',
-      replace: true,
-    })
+    const redirect = (route.query.redirect as string) || '/'
+    router.push(redirect)
   } else {
-    message.error('登录失败，' + res.data.message)
+    message.error(`登录失败，${res.data.message}`)
   }
 }
-
 </script>
 
-<style>
-#userLoginPage {
-  max-width: 360px;
-  margin: 0 auto;
+<style scoped>
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #eef5ff 0%, #f7f9fc 100%);
 }
-
-.title {
-  text-align: center;
-  margin-bottom: 16px;
+.auth-card {
+  width: 420px;
+  padding: 32px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(31, 35, 41, 0.08);
 }
-
-.desc {
-  text-align: center;
-  color: #bbb;
-  margin-bottom: 16px;
+.header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 24px;
 }
-
+.logo {
+  width: 48px;
+  height: 48px;
+}
+.header h2 {
+  margin: 0 0 4px;
+}
+.header p {
+  margin: 0;
+  color: #8c8c8c;
+}
 .tips {
-  margin-bottom: 16px;
-  color: #bbb;
-  font-size: 13px;
   text-align: right;
+  margin-bottom: 16px;
+  color: #8c8c8c;
 }
-
 </style>
