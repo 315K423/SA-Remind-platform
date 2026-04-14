@@ -1,13 +1,13 @@
 <template>
   <a-layout class="basic-layout">
-    <a-layout-sider :collapsed="collapsed" collapsible width="232" class="sider">
+    <a-layout-sider :collapsed="collapsed" collapsible width="248" class="sider">
       <div class="brand">SA Reminder</div>
       <a-menu
-        theme="dark"
-        mode="inline"
-        :selectedKeys="selectedKeys"
-        :items="menuItems"
-        @click="onMenuClick"
+          theme="dark"
+          mode="inline"
+          :selectedKeys="selectedKeys"
+          :items="menuItems"
+          @click="onMenuClick"
       />
     </a-layout-sider>
     <a-layout>
@@ -27,13 +27,22 @@
 
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
-import { HomeOutlined, CalendarOutlined, BellOutlined, TeamOutlined } from '@ant-design/icons-vue'
+import {
+  HomeOutlined,
+  CalendarOutlined,
+  BellOutlined,
+  TeamOutlined,
+  NotificationOutlined,
+  ApartmentOutlined,
+  AuditOutlined,
+} from '@ant-design/icons-vue'
 import type { MenuProps } from 'ant-design-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useLoginUserStore } from '@/stores/loginUser'
 import GlobalHeader from '@/components/GlobalHeader.vue'
 import GlobalFooter from '@/components/GlobalFooter.vue'
 import GlobalReminderPopup from '@/components/GlobalReminderPopup.vue'
+import { isAdmin } from '@/utils/app'
 
 const router = useRouter()
 const route = useRoute()
@@ -42,26 +51,54 @@ const collapsed = ref(false)
 const selectedKeys = ref<string[]>([route.path])
 
 watch(
-  () => route.path,
-  (newPath) => {
-    selectedKeys.value = [newPath]
-  },
-  { immediate: true },
+    () => route.path,
+    (newPath) => {
+      selectedKeys.value = [newPath]
+    },
+    { immediate: true },
 )
 
-const originItems: MenuProps['items'] = [
+const commonItems: MenuProps['items'] = [
   { key: '/', icon: () => h(HomeOutlined), label: '工作台', title: '工作台' },
+  { key: '/schedule/my', icon: () => h(CalendarOutlined), label: '我的日程', title: '我的日程' },
   { key: '/schedule/manage', icon: () => h(CalendarOutlined), label: '日程管理', title: '日程管理' },
   { key: '/reminder/rule', icon: () => h(BellOutlined), label: '提醒策略', title: '提醒策略' },
   { key: '/reminder/popup', icon: () => h(BellOutlined), label: '弹窗提醒', title: '弹窗提醒' },
+  {
+    key: '/announcement/list',
+    icon: () => h(NotificationOutlined),
+    label: '公告通知',
+    title: '公告通知',
+  },
+]
+
+const adminItems: MenuProps['items'] = [
   { key: '/admin/userManage', icon: () => h(TeamOutlined), label: '用户管理', title: '用户管理' },
+  {
+    key: '/admin/departmentManage',
+    icon: () => h(ApartmentOutlined),
+    label: '部门管理',
+    title: '部门管理',
+  },
+  {
+    key: '/admin/announcementManage',
+    icon: () => h(NotificationOutlined),
+    label: '公告管理',
+    title: '公告管理',
+  },
+  {
+    key: '/admin/attendanceManage',
+    icon: () => h(AuditOutlined),
+    label: '考勤管理',
+    title: '考勤管理',
+  },
 ]
 
 const menuItems = computed(() => {
-  if (loginUserStore.loginUser.userRole === 'admin') {
-    return originItems
+  if (isAdmin(loginUserStore.loginUser.userRole)) {
+    return [...commonItems, ...adminItems]
   }
-  return originItems.filter((item) => item?.key !== '/admin/userManage')
+  return commonItems
 })
 
 const onMenuClick: MenuProps['onClick'] = ({ key }) => {

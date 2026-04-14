@@ -5,8 +5,14 @@
 import * as userController from './userController'
 import * as scheduleEventController from './scheduleEventController'
 import * as scheduleReminderController from './scheduleReminderController'
+import * as scheduleAttendanceController from './scheduleAttendanceController'
+import * as departmentController from './departmentController'
+import * as announcementController from './announcementController'
 export default {
   userController,
   scheduleEventController,
   scheduleReminderController,
+  scheduleAttendanceController,
+  departmentController,
+  announcementController,
 }

@@ -5,13 +5,16 @@
         <img class="logo" src="@/assets/logo.png" alt="logo" />
         <div class="title-wrapper">
           <div class="title">企业日程与考勤智能提醒平台</div>
-          <div class="sub-title">Schedule & Attendance Reminder Admin</div>
+          <div class="sub-title">Schedule · Attendance · Reminder</div>
         </div>
       </a-space>
     </div>
     <div class="right">
       <a-space size="middle">
-        <a-tag color="blue">{{ loginUserStore.loginUser.userRole === 'admin' ? '管理员' : '员工' }}</a-tag>
+        <a-tag color="blue">{{ getRoleLabel(loginUserStore.loginUser.userRole) }}</a-tag>
+        <a-tag v-if="loginUserStore.loginUser.departmentName" color="geekblue">
+          {{ loginUserStore.loginUser.departmentName }}
+        </a-tag>
         <a-dropdown>
           <a-space class="user-trigger">
             <a-avatar :src="loginUserStore.loginUser.userAvatar">
@@ -22,6 +25,8 @@
           <template #overlay>
             <a-menu>
               <a-menu-item @click="goHome">返回工作台</a-menu-item>
+              <a-menu-item @click="goMySchedule">我的日程</a-menu-item>
+              <a-menu-item @click="goAnnouncement">公告通知</a-menu-item>
               <a-menu-item danger @click="doLogout">退出登录</a-menu-item>
             </a-menu>
           </template>
@@ -36,12 +41,21 @@ import { useLoginUserStore } from '@/stores/loginUser'
 import { userLogout } from '@/api/userController'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
+import { getRoleLabel } from '@/utils/app'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
 
 const goHome = () => {
   router.push('/')
+}
+
+const goMySchedule = () => {
+  router.push('/schedule/my')
+}
+
+const goAnnouncement = () => {
+  router.push('/announcement/list')
 }
 
 const doLogout = async () => {

@@ -7,6 +7,17 @@ spring:
     url: jdbc:mysql://localhost:3306/sa_reminder
     username: root
     password: 123456
+  profiles:
+    active: local
+  mail:
+    host: smtp.163.com
+    username: allexu@163.com
+    password: EYmam342Hpt9vy6C
+    default-encoding: UTF-8
+  properties:
+    mail:
+      smtp:
+        auth: true
 server:
   port: 8080
   servlet:

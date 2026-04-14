@@ -10,34 +10,24 @@ import java.util.List;
 public class ScheduleEventVO implements Serializable {
 
     private Long id;
-
     private String title;
-
     private String content;
-
     private String location;
-
     private LocalDateTime startTime;
-
     private LocalDateTime endTime;
-
     private Integer allDay;
-
     private String scheduleType;
-
     private String visibility;
-
     private String status;
-
     private Long creatorId;
-
-    /**
-     * 参与人 userId 列表（简化版）
-     */
+    private Integer checkInEnabled;
+    private String checkInAddress;
+    private Double checkInLatitude;
+    private Double checkInLongitude;
+    private Integer checkInRadiusMeters;
     private List<Long> participantUserIdList;
-
+    private List<Long> departmentIdList;
     private LocalDateTime createTime;
-
     private LocalDateTime updateTime;
 
     private static final long serialVersionUID = 1L;

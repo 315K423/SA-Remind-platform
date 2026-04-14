@@ -4,7 +4,7 @@ import request from '@/request'
 
 /** 此处后端没有提供注释 POST /schedule/add */
 export async function add(body: API.ScheduleEventAddRequest, options?: { [key: string]: any }) {
-  return request<API.BaseResponseLong>('/schedule/add', {
+  return request<API.BaseResponseScheduleEventSaveVO>('/schedule/add', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -68,12 +68,42 @@ export async function listPage(
   })
 }
 
+/** 此处后端没有提供注释 GET /schedule/my/day */
+export async function getMyDay(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.getMyDayParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseScheduleCalendarDayVO>('/schedule/my/day', {
+    method: 'GET',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /schedule/my/month */
+export async function listMyMonth(
+  body: API.ScheduleCalendarQueryRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseListScheduleEventVO>('/schedule/my/month', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 此处后端没有提供注释 POST /schedule/update */
 export async function update(
   body: API.ScheduleEventUpdateRequest,
   options?: { [key: string]: any }
 ) {
-  return request<API.BaseResponseBoolean>('/schedule/update', {
+  return request<API.BaseResponseScheduleEventSaveVO>('/schedule/update', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

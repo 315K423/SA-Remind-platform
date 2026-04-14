@@ -6,24 +6,20 @@ import lombok.Getter;
 @Getter
 public enum UserRoleEnum {
 
-    USER("用户", "user"),
-    ADMIN("管理员", "admin");
+    USER("普通员工", "user", 1),
+    MANAGER("部门经理", "manager", 2),
+    ADMIN("管理员", "admin", 3);
 
     private final String text;
-
     private final String value;
+    private final int level;
 
-    UserRoleEnum(String text, String value) {
+    UserRoleEnum(String text, String value, int level) {
         this.text = text;
         this.value = value;
+        this.level = level;
     }
 
-    /**
-     * 根据 value 获取枚举
-     *
-     * @param value 枚举值的value
-     * @return 枚举值
-     */
     public static UserRoleEnum getEnumByValue(String value) {
         if (ObjUtil.isEmpty(value)) {
             return null;
@@ -34,5 +30,25 @@ public enum UserRoleEnum {
             }
         }
         return null;
+    }
+
+    public static boolean hasRole(String loginRole, String mustRole) {
+        if (mustRole == null || mustRole.isBlank()) {
+            return true;
+        }
+        UserRoleEnum loginRoleEnum = getEnumByValue(loginRole);
+        UserRoleEnum mustRoleEnum = getEnumByValue(mustRole);
+        if (loginRoleEnum == null || mustRoleEnum == null) {
+            return false;
+        }
+        return loginRoleEnum.level >= mustRoleEnum.level;
+    }
+
+    public boolean isAdmin() {
+        return this == ADMIN;
+    }
+
+    public boolean isManager() {
+        return this == MANAGER;
     }
 }

@@ -24,9 +24,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * 日程提醒策略 / 弹窗提醒 控制层。
- */
 @RestController
 @RequestMapping("/schedule/reminder")
 public class ScheduleReminderController {
@@ -40,9 +37,6 @@ public class ScheduleReminderController {
     @Resource
     private UserService userService;
 
-    /**
-     * 保存或更新提醒策略（员工可为自己可见的日程设置提醒）
-     */
     @PostMapping("/rule/save")
     @AuthCheck
     public BaseResponse<Long> saveRule(@RequestBody ScheduleReminderRuleSaveRequest request,
@@ -53,9 +47,6 @@ public class ScheduleReminderController {
         return ResultUtils.success(id);
     }
 
-    /**
-     * 根据 scheduleId 获取当前登录用户的提醒策略
-     */
     @GetMapping("/rule/get")
     @AuthCheck
     public BaseResponse<ScheduleReminderRuleVO> getRuleByScheduleId(long scheduleId,
@@ -71,9 +62,6 @@ public class ScheduleReminderController {
         return ResultUtils.success(scheduleReminderRuleService.getScheduleReminderRuleVO(list.get(0)));
     }
 
-    /**
-     * 删除提醒策略
-     */
     @PostMapping("/rule/delete")
     @AuthCheck
     public BaseResponse<Boolean> deleteRule(@RequestBody DeleteRequest deleteRequest,
@@ -85,9 +73,6 @@ public class ScheduleReminderController {
         return ResultUtils.success(result);
     }
 
-    /**
-     * 分页查询提醒策略
-     */
     @PostMapping("/rule/list/page/vo")
     @AuthCheck
     public BaseResponse<Page<ScheduleReminderRuleVO>> listRuleByPage(@RequestBody ScheduleReminderRuleQueryRequest queryRequest,
@@ -96,16 +81,15 @@ public class ScheduleReminderController {
         User loginUser = userService.getLoginUser(httpServletRequest);
         long pageNum = queryRequest.getPageNum();
         long pageSize = queryRequest.getPageSize();
-        Page<ScheduleReminderRule> page = scheduleReminderRuleService.page(Page.of(pageNum, pageSize),
-                scheduleReminderRuleService.getQueryWrapper(queryRequest, loginUser));
+        Page<ScheduleReminderRule> page = scheduleReminderRuleService.page(
+                Page.of(pageNum, pageSize),
+                scheduleReminderRuleService.getQueryWrapper(queryRequest, loginUser)
+        );
         Page<ScheduleReminderRuleVO> voPage = new Page<>(pageNum, pageSize, page.getTotalRow());
         voPage.setRecords(scheduleReminderRuleService.getScheduleReminderRuleVOList(page.getRecords()));
         return ResultUtils.success(voPage);
     }
 
-    /**
-     * 当前用户获取待弹窗提醒列表
-     */
     @GetMapping("/popup/list")
     @AuthCheck
     public BaseResponse<List<ScheduleReminderPopupVO>> listPopupTasks(HttpServletRequest httpServletRequest) {
@@ -113,9 +97,6 @@ public class ScheduleReminderController {
         return ResultUtils.success(scheduleReminderTaskService.listPopupTasks(loginUser));
     }
 
-    /**
-     * 标记某个弹窗提醒已读
-     */
     @PostMapping("/popup/read")
     @AuthCheck
     public BaseResponse<Boolean> readPopup(@RequestBody DeleteRequest deleteRequest,
@@ -126,9 +107,6 @@ public class ScheduleReminderController {
         return ResultUtils.success(scheduleReminderTaskService.readPopupTask(deleteRequest.getId(), loginUser));
     }
 
-    /**
-     * 全部已读
-     */
     @PostMapping("/popup/read/all")
     @AuthCheck
     public BaseResponse<Boolean> readAllPopup(@RequestBody(required = false) ScheduleReminderPopupReadAllRequest request,
@@ -139,7 +117,7 @@ public class ScheduleReminderController {
     }
 
     /**
-     * 管理员手动触发一次扫描，便于联调
+     * 仅管理员允许手动触发一次全量扫描
      */
     @PostMapping("/admin/scanNow")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)

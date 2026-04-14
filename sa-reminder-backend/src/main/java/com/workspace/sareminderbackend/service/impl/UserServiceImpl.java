@@ -1,6 +1,5 @@
 package com.workspace.sareminderbackend.service.impl;
 
-
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
@@ -8,39 +7,40 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.workspace.sareminderbackend.exception.BusinessException;
 import com.workspace.sareminderbackend.exception.ErrorCode;
-import com.workspace.sareminderbackend.model.dto.UserQueryRequest;
-import com.workspace.sareminderbackend.model.entity.User;
+import com.workspace.sareminderbackend.mapper.DepartmentMapper;
 import com.workspace.sareminderbackend.mapper.UserMapper;
+import com.workspace.sareminderbackend.model.dto.UserQueryRequest;
+import com.workspace.sareminderbackend.model.entity.Department;
+import com.workspace.sareminderbackend.model.entity.User;
 import com.workspace.sareminderbackend.model.enums.UserRoleEnum;
 import com.workspace.sareminderbackend.model.vo.LoginUserVO;
 import com.workspace.sareminderbackend.model.vo.UserVO;
 import com.workspace.sareminderbackend.service.UserService;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.workspace.sareminderbackend.constant.UserConstant.USER_LOGIN_STATE;
 
-/**
- * 用户 服务层实现。
- *
- * @author <a href="https://gitee.com/Elysia315k423/schedule-attendance-reminder">Elysia315K-企业日程与智能考勤提醒平台</a>
- */
 @Service
-public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements UserService{
+public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+
+    @Resource
+    private DepartmentMapper departmentMapper;
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
-        // 1. 校验参数
         if (StrUtil.hasBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
         }
-        if (userAccount.length() < 4 ) {
+        if (userAccount.length() < 4) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号过短");
         }
         if (userPassword.length() < 8 || checkPassword.length() < 8) {
@@ -49,29 +49,27 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (!userPassword.equals(checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "两次密码不一致");
         }
-        // 2. 查询用户是否已存在
         QueryWrapper queryWrapper = new QueryWrapper();
         queryWrapper.eq("userAccount", userAccount);
         long count = this.mapper.selectCountByQuery(queryWrapper);
         if (count > 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户已存在");
         }
-        // 3. 加密密码
         String encryptPassword = getEncryptPassword(userPassword);
-        // 4. 创建用户,插入数据库
         User user = new User();
         user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
         user.setUserName("无名");
         user.setUserRole(UserRoleEnum.USER.getValue());
+        user.setCreateTime(LocalDateTime.now());
+        user.setUpdateTime(LocalDateTime.now());
+        user.setEditTime(LocalDateTime.now());
         boolean saveResult = this.save(user);
-
         if (!saveResult) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "用户注册失败,数据库错误");
         }
         return user.getId();
     }
-
 
     @Override
     public LoginUserVO getLoginUserVO(User user) {
@@ -80,12 +78,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         }
         LoginUserVO loginUserVO = new LoginUserVO();
         BeanUtil.copyProperties(user, loginUserVO);
+        fillDepartmentInfo(user.getDepartmentId(), loginUserVO);
         return loginUserVO;
     }
 
     @Override
     public LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request) {
-        // 1. 椒盐参数
         if (StrUtil.hasBlank(userAccount, userPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号或密码为空");
         }
@@ -95,9 +93,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (userPassword.length() < 8) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码长度不能小于8");
         }
-        // 2. 加密
         String encryptPassword = getEncryptPassword(userPassword);
-        // 3. 查询用户是否存在
         QueryWrapper queryWrapper = new QueryWrapper();
         queryWrapper.eq("userAccount", userAccount);
         queryWrapper.eq("userPassword", encryptPassword);
@@ -105,24 +101,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (user == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
         }
-        // 4. 如果用户存在，记录用户的登录态
         request.getSession().setAttribute(USER_LOGIN_STATE, user);
-        // 5. 返回脱敏的用户信息
         return this.getLoginUserVO(user);
     }
 
-
     @Override
     public User getLoginUser(HttpServletRequest request) {
-        // 先判断是否已登录
         Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
         User currentUser = (User) userObj;
         if (currentUser == null || currentUser.getId() == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
-        // 从数据库查询（追求性能的话可以注释，直接返回上述结果）
-        long userId = currentUser.getId();
-        currentUser = this.getById(userId);
+        currentUser = this.getById(currentUser.getId());
         if (currentUser == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
@@ -136,6 +126,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         }
         UserVO userVO = new UserVO();
         BeanUtil.copyProperties(user, userVO);
+        fillDepartmentInfo(user.getDepartmentId(), userVO);
         return userVO;
     }
 
@@ -144,20 +135,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (CollUtil.isEmpty(userList)) {
             return new ArrayList<>();
         }
-        return userList.stream()
-                .map(this::getUserVO)
-                .collect(Collectors.toList());
+        return userList.stream().map(this::getUserVO).collect(Collectors.toList());
     }
-
 
     @Override
     public boolean userLogout(HttpServletRequest request) {
-        // 先判断是否已登录
         Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
         if (userObj == null) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "未登录");
         }
-        // 移除登录态
         request.getSession().removeAttribute(USER_LOGIN_STATE);
         return true;
     }
@@ -167,29 +153,63 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (userQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
-        Long id = userQueryRequest.getId();
-        String userAccount = userQueryRequest.getUserAccount();
-        String userName = userQueryRequest.getUserName();
-        String userProfile = userQueryRequest.getUserProfile();
-        String userRole = userQueryRequest.getUserRole();
-        String sortField = userQueryRequest.getSortField();
-        String sortOrder = userQueryRequest.getSortOrder();
         return QueryWrapper.create()
-                .eq("id", id)
-                .eq("userRole", userRole)
-                .like("userAccount", userAccount)
-                .like("userName", userName)
-                .like("userProfile", userProfile)
-                .orderBy(sortField, "ascend".equals(sortOrder));
+                .eq("id", userQueryRequest.getId())
+                .eq("userRole", userQueryRequest.getUserRole())
+                .eq("departmentId", userQueryRequest.getDepartmentId())
+                .like("userAccount", userQueryRequest.getUserAccount())
+                .like("userName", userQueryRequest.getUserName())
+                .like("userProfile", userQueryRequest.getUserProfile())
+                .orderBy(userQueryRequest.getSortField(), "ascend".equals(userQueryRequest.getSortOrder()));
     }
-
-
 
     @Override
-    public String getEncryptPassword(String UserPassword) {
-        //盐值，混淆密码
+    public String getEncryptPassword(String userPassword) {
         final String SALT = "aicode";
-        return DigestUtils.md5DigestAsHex((UserPassword + SALT).getBytes(StandardCharsets.UTF_8));
+        return DigestUtils.md5DigestAsHex((userPassword + SALT).getBytes(StandardCharsets.UTF_8));
     }
 
+    @Override
+    public List<User> listByDepartmentId(Long departmentId) {
+        if (departmentId == null) {
+            return new ArrayList<>();
+        }
+        return this.list(QueryWrapper.create().eq("departmentId", departmentId));
+    }
+
+    @Override
+    public void validateDepartmentUser(User user, Long departmentId) {
+        if (user == null || user.getId() == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在");
+        }
+        if (!departmentId.equals(user.getDepartmentId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "用户不属于指定部门");
+        }
+    }
+
+    @Override
+    public boolean isAdmin(User user) {
+        return UserRoleEnum.ADMIN.equals(UserRoleEnum.getEnumByValue(user.getUserRole()));
+    }
+
+    @Override
+    public boolean isManager(User user) {
+        return UserRoleEnum.MANAGER.equals(UserRoleEnum.getEnumByValue(user.getUserRole()));
+    }
+
+    private void fillDepartmentInfo(Long departmentId, Object target) {
+        if (departmentId == null) {
+            return;
+        }
+        Department department = departmentMapper.selectOneById(departmentId);
+        if (department == null) {
+            return;
+        }
+        if (target instanceof UserVO userVO) {
+            userVO.setDepartmentName(department.getName());
+        }
+        if (target instanceof LoginUserVO loginUserVO) {
+            loginUserVO.setDepartmentName(department.getName());
+        }
+    }
 }

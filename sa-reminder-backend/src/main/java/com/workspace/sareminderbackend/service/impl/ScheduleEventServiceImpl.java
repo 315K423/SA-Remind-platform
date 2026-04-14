@@ -7,165 +7,167 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.workspace.sareminderbackend.exception.BusinessException;
 import com.workspace.sareminderbackend.exception.ErrorCode;
+import com.workspace.sareminderbackend.mapper.ScheduleDepartmentMapper;
 import com.workspace.sareminderbackend.mapper.ScheduleEventMapper;
 import com.workspace.sareminderbackend.mapper.ScheduleParticipantMapper;
 import com.workspace.sareminderbackend.model.dto.schedule.ScheduleEventAddRequest;
 import com.workspace.sareminderbackend.model.dto.schedule.ScheduleEventQueryRequest;
 import com.workspace.sareminderbackend.model.dto.schedule.ScheduleEventUpdateRequest;
+import com.workspace.sareminderbackend.model.entity.User;
+import com.workspace.sareminderbackend.model.entity.schedule.ScheduleDepartment;
 import com.workspace.sareminderbackend.model.entity.schedule.ScheduleEvent;
 import com.workspace.sareminderbackend.model.entity.schedule.ScheduleParticipant;
-import com.workspace.sareminderbackend.model.entity.User;
 import com.workspace.sareminderbackend.model.enums.UserRoleEnum;
+import com.workspace.sareminderbackend.model.vo.ScheduleCalendarDayVO;
+import com.workspace.sareminderbackend.model.vo.ScheduleConflictVO;
+import com.workspace.sareminderbackend.model.vo.ScheduleEventSaveVO;
 import com.workspace.sareminderbackend.model.vo.ScheduleEventVO;
+import com.workspace.sareminderbackend.service.DepartmentService;
 import com.workspace.sareminderbackend.service.ScheduleEventService;
+import com.workspace.sareminderbackend.service.UserService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.time.YearMonth;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-/**
- * 日程事件 服务实现。
- */
 @Service
-public class ScheduleEventServiceImpl extends ServiceImpl<ScheduleEventMapper, ScheduleEvent>
-        implements ScheduleEventService {
+public class ScheduleEventServiceImpl extends ServiceImpl<ScheduleEventMapper, ScheduleEvent> implements ScheduleEventService {
 
     public static final String TYPE_PERSONAL = "personal";
+    public static final String TYPE_MEETING = "meeting";
+    public static final String TYPE_ATTENDANCE = "attendance";
     public static final String TYPE_COMPANY = "company";
-
     public static final String VIS_PRIVATE = "private";
     public static final String VIS_PUBLIC = "public";
-
     public static final String STATUS_NORMAL = "normal";
     public static final String STATUS_CANCELLED = "cancelled";
 
     @Resource
     private ScheduleParticipantMapper scheduleParticipantMapper;
 
+    @Resource
+    private ScheduleDepartmentMapper scheduleDepartmentMapper;
+
+    @Resource
+    private UserService userService;
+
+    @Resource
+    private DepartmentService departmentService;
+
     @Override
-    public long addScheduleEvent(ScheduleEventAddRequest request, User loginUser) {
-        if (request == null) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+    public ScheduleEventSaveVO addScheduleEvent(ScheduleEventAddRequest request, User loginUser) {
+        validateBasic(request.getTitle(), request.getStartTime(), request.getEndTime());
+        validateCheckInConfig(request.getScheduleType(), request.getCheckInEnabled(), request.getCheckInLatitude(), request.getCheckInLongitude(), request.getCheckInRadiusMeters());
+        RoleScope roleScope = buildRoleScopeForCreate(request.getDepartmentIdList(), request.getParticipantUserIdList(), loginUser);
+        List<ScheduleConflictVO> conflictList = findConflicts(null, request.getStartTime(), request.getEndTime(), loginUser, roleScope.participantIds);
+        if (CollUtil.isNotEmpty(conflictList)) {
+            return buildConflictResult(conflictList);
         }
-        // 1. 基础校验
-        String title = request.getTitle();
-        if (StrUtil.isBlank(title) || title.length() > 256) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "标题为空或过长");
-        }
-        LocalDateTime startTime = request.getStartTime();
-        LocalDateTime endTime = request.getEndTime();
-        if (startTime == null || endTime == null || endTime.isBefore(startTime)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "开始/结束时间不合法");
-        }
-        String scheduleType = StrUtil.blankToDefault(request.getScheduleType(), TYPE_PERSONAL);
-        String visibility = StrUtil.blankToDefault(request.getVisibility(), VIS_PRIVATE);
-
-        // 2. 权限：company 仅管理员
-        if (TYPE_COMPANY.equals(scheduleType)) {
-            UserRoleEnum roleEnum = UserRoleEnum.getEnumByValue(loginUser.getUserRole());
-            if (!UserRoleEnum.ADMIN.equals(roleEnum)) {
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "仅管理员可创建公司日程");
-            }
-        }
-
-        // 3. 保存日程
         ScheduleEvent scheduleEvent = new ScheduleEvent();
         BeanUtil.copyProperties(request, scheduleEvent);
-        scheduleEvent.setScheduleType(scheduleType);
-        scheduleEvent.setVisibility(visibility);
+        String finalScheduleType = resolveScheduleType(request.getScheduleType(), loginUser);
+        scheduleEvent.setScheduleType(finalScheduleType);
+        scheduleEvent.setVisibility(StrUtil.blankToDefault(request.getVisibility(), VIS_PRIVATE));
         scheduleEvent.setStatus(STATUS_NORMAL);
         scheduleEvent.setAllDay(request.getAllDay() == null ? 0 : request.getAllDay());
+        int finalCheckInEnabled = request.getCheckInEnabled() == null ? (TYPE_ATTENDANCE.equals(finalScheduleType) ? 1 : 0) : request.getCheckInEnabled();
+        scheduleEvent.setCheckInEnabled(finalCheckInEnabled);
+        if (Objects.equals(finalCheckInEnabled, 1)) {
+            scheduleEvent.setCheckInRadiusMeters(request.getCheckInRadiusMeters() == null ? 200 : request.getCheckInRadiusMeters());
+        } else {
+            scheduleEvent.setCheckInAddress(null);
+            scheduleEvent.setCheckInLatitude(null);
+            scheduleEvent.setCheckInLongitude(null);
+            scheduleEvent.setCheckInRadiusMeters(null);
+        }
         scheduleEvent.setCreatorId(loginUser.getId());
-        scheduleEvent.setEditTime(LocalDateTime.now());
-        scheduleEvent.setCreateTime(LocalDateTime.now());
-        scheduleEvent.setUpdateTime(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        scheduleEvent.setEditTime(now);
+        scheduleEvent.setCreateTime(now);
+        scheduleEvent.setUpdateTime(now);
         scheduleEvent.setIsDelete(0);
-
         boolean saved = this.save(scheduleEvent);
         if (!saved) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "创建日程失败");
         }
-
-        // 4. 参与人处理：
-        // - 默认把创建人写入 owner
-        // - 普通员工只允许自己
-        List<Long> participantIds = request.getParticipantUserIdList();
-        List<Long> finalIds = new ArrayList<>();
-        finalIds.add(loginUser.getId());
-        if (CollUtil.isNotEmpty(participantIds)) {
-            UserRoleEnum roleEnum = UserRoleEnum.getEnumByValue(loginUser.getUserRole());
-            if (UserRoleEnum.ADMIN.equals(roleEnum)) {
-                finalIds.addAll(participantIds);
-            } else {
-                // 普通用户：若传入包含非本人，直接拒绝
-                boolean hasOther = participantIds.stream().anyMatch(id -> !Objects.equals(id, loginUser.getId()));
-                if (hasOther) {
-                    throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "普通用户只能为自己创建日程");
-                }
-            }
-        }
-        // 去重
-        finalIds = finalIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
-        batchInsertParticipants(scheduleEvent.getId(), finalIds, loginUser.getId());
-
-        return scheduleEvent.getId();
+        syncParticipants(scheduleEvent.getId(), roleScope.participantIds, loginUser.getId());
+        syncDepartments(scheduleEvent.getId(), roleScope.departmentIds);
+        ScheduleEventSaveVO result = new ScheduleEventSaveVO();
+        result.setSuccess(true);
+        result.setEventId(scheduleEvent.getId());
+        result.setConflictDetected(false);
+        return result;
     }
 
     @Override
-    public boolean updateScheduleEvent(ScheduleEventUpdateRequest request, User loginUser) {
+    public ScheduleEventSaveVO updateScheduleEvent(ScheduleEventUpdateRequest request, User loginUser) {
         if (request == null || request.getId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        long id = request.getId();
-        ScheduleEvent old = this.getById(id);
+        ScheduleEvent old = this.getById(request.getId());
         if (old == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
-        // 权限：管理员 或 创建人
-        if (!isAdmin(loginUser) && !Objects.equals(old.getCreatorId(), loginUser.getId())) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        if (!canEditSchedule(old, loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权修改该日程");
         }
-
-        // 校验时间
         LocalDateTime startTime = request.getStartTime() == null ? old.getStartTime() : request.getStartTime();
         LocalDateTime endTime = request.getEndTime() == null ? old.getEndTime() : request.getEndTime();
-        if (startTime == null || endTime == null || endTime.isBefore(startTime)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "开始/结束时间不合法");
+        validateBasic(StrUtil.blankToDefault(request.getTitle(), old.getTitle()), startTime, endTime);
+        validateCheckInConfig(
+                StrUtil.blankToDefault(request.getScheduleType(), old.getScheduleType()),
+                request.getCheckInEnabled() == null ? old.getCheckInEnabled() : request.getCheckInEnabled(),
+                request.getCheckInLatitude() == null ? old.getCheckInLatitude() : request.getCheckInLatitude(),
+                request.getCheckInLongitude() == null ? old.getCheckInLongitude() : request.getCheckInLongitude(),
+                request.getCheckInRadiusMeters() == null ? old.getCheckInRadiusMeters() : request.getCheckInRadiusMeters()
+        );
+        List<Long> participantIds = request.getParticipantUserIdList() == null ? getParticipantIds(old.getId()) : request.getParticipantUserIdList();
+        List<Long> departmentIds = request.getDepartmentIdList() == null ? getDepartmentIds(old.getId()) : request.getDepartmentIdList();
+        RoleScope roleScope = buildRoleScopeForCreate(departmentIds, participantIds, loginUser);
+        if (!roleScope.participantIds.contains(old.getCreatorId())) {
+            roleScope.participantIds.add(old.getCreatorId());
         }
-
-        ScheduleEvent toUpdate = new ScheduleEvent();
-        BeanUtil.copyProperties(request, toUpdate);
-        toUpdate.setEditTime(LocalDateTime.now());
-        boolean updated = this.updateById(toUpdate);
-        if (!updated) {
+        List<ScheduleConflictVO> conflictList = findConflicts(old.getId(), startTime, endTime, loginUser, roleScope.participantIds);
+        if (CollUtil.isNotEmpty(conflictList)) {
+            return buildConflictResult(conflictList);
+        }
+        ScheduleEvent update = new ScheduleEvent();
+        BeanUtil.copyProperties(request, update);
+        update.setId(old.getId());
+        String finalScheduleType = StrUtil.blankToDefault(request.getScheduleType(), old.getScheduleType());
+        update.setScheduleType(finalScheduleType);
+        int finalCheckInEnabled = request.getCheckInEnabled() == null
+                ? (old.getCheckInEnabled() == null ? (TYPE_ATTENDANCE.equals(finalScheduleType) ? 1 : 0) : old.getCheckInEnabled())
+                : request.getCheckInEnabled();
+        update.setCheckInEnabled(finalCheckInEnabled);
+        if (Objects.equals(finalCheckInEnabled, 1)) {
+            update.setCheckInRadiusMeters(request.getCheckInRadiusMeters() == null
+                    ? (old.getCheckInRadiusMeters() == null ? 200 : old.getCheckInRadiusMeters())
+                    : request.getCheckInRadiusMeters());
+        } else {
+            update.setCheckInAddress(null);
+            update.setCheckInLatitude(null);
+            update.setCheckInLongitude(null);
+            update.setCheckInRadiusMeters(null);
+        }
+        update.setUpdateTime(LocalDateTime.now());
+        update.setEditTime(LocalDateTime.now());
+        boolean ok = this.updateById(update);
+        if (!ok) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新日程失败");
         }
-
-        // 覆盖式更新参与人
-        if (request.getParticipantUserIdList() != null) {
-            // 先删旧（逻辑删除会在 isDelete 上打标；BaseMapper#deleteByQuery 走物理删除，这里用 update 方式）
-            QueryWrapper delWrapper = QueryWrapper.create()
-                    .eq("scheduleId", id);
-            // 物理删除更简单（参与人本身可重建），并不影响主表逻辑删除语义
-            scheduleParticipantMapper.deleteByQuery(delWrapper);
-
-            List<Long> ids = request.getParticipantUserIdList().stream()
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .collect(Collectors.toList());
-            // 始终保留创建人
-            if (!ids.contains(old.getCreatorId())) {
-                ids.add(old.getCreatorId());
-            }
-            batchInsertParticipants(id, ids, old.getCreatorId());
-        }
-
-        return true;
+        syncParticipants(old.getId(), roleScope.participantIds, old.getCreatorId());
+        syncDepartments(old.getId(), roleScope.departmentIds);
+        ScheduleEventSaveVO result = new ScheduleEventSaveVO();
+        result.setSuccess(true);
+        result.setEventId(old.getId());
+        result.setConflictDetected(false);
+        return result;
     }
 
     @Override
@@ -177,57 +179,64 @@ public class ScheduleEventServiceImpl extends ServiceImpl<ScheduleEventMapper, S
         if (old == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
-        if (!isAdmin(loginUser) && !Objects.equals(old.getCreatorId(), loginUser.getId())) {
+        if (!canEditSchedule(old, loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         boolean removed = this.removeById(id);
         if (!removed) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
         }
-        // 参与人表物理删除（简化）
         scheduleParticipantMapper.deleteByQuery(QueryWrapper.create().eq("scheduleId", id));
+        scheduleDepartmentMapper.deleteByQuery(QueryWrapper.create().eq("scheduleId", id));
         return true;
     }
 
     @Override
     public QueryWrapper getQueryWrapper(ScheduleEventQueryRequest request, User loginUser) {
-        if (request == null) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
+        QueryWrapper wrapper = QueryWrapper.create()
+                .eq("id", request.getId())
+                .like("title", request.getTitle())
+                .eq("scheduleType", request.getScheduleType());
+        if (request.getStartTimeFrom() != null) {
+            wrapper.ge("startTime", request.getStartTimeFrom());
+        }
+        if (request.getStartTimeTo() != null) {
+            wrapper.le("startTime", request.getStartTimeTo());
         }
 
-        Long id = request.getId();
-        String title = request.getTitle();
-        String scheduleType = request.getScheduleType();
-        LocalDateTime from = request.getStartTimeFrom();
-        LocalDateTime to = request.getStartTimeTo();
-        Long creatorId = request.getCreatorId();
-
-        QueryWrapper wrapper = QueryWrapper.create()
-                .eq("id", id)
-                .like("title", title)
-                .eq("scheduleType", scheduleType)
-                .ge("startTime", from)
-                .le("startTime", to);
-
-        // 权限收敛：
-        // - 管理员：可按 creatorId 查询，不传则查询全部
-        // - 普通用户：只能看到自己创建的 或 自己参与的
-        if (isAdmin(loginUser)) {
-            wrapper.eq("creatorId", creatorId);
-        } else {
-            // 自己创建的
-            // 或 参与的（子查询）
-            QueryWrapper joinSub = QueryWrapper.create()
-                    .select("scheduleId")
-                    .from("schedule_participant")
+        QueryWrapper participantSub = QueryWrapper.create().select("scheduleId").from("schedule_participant").eq("isDelete", 0);
+        if (request.getParticipantUserId() != null) {
+            participantSub.eq("userId", request.getParticipantUserId());
+            wrapper.in("id", participantSub);
+        }
+        if (request.getDepartmentId() != null) {
+            QueryWrapper deptSub = QueryWrapper.create().select("scheduleId").from("schedule_department").eq("isDelete", 0)
+                    .eq("departmentId", request.getDepartmentId());
+            wrapper.in("id", deptSub);
+        }
+        if (userService.isAdmin(loginUser)) {
+            wrapper.eq("creatorId", request.getCreatorId());
+        } else if (userService.isManager(loginUser)) {
+            Long deptId = loginUser.getDepartmentId();
+            QueryWrapper joinSub = QueryWrapper.create().select("scheduleId").from("schedule_participant").eq("isDelete", 0)
                     .eq("userId", loginUser.getId());
-
+            QueryWrapper deptSub = QueryWrapper.create().select("scheduleId").from("schedule_department").eq("isDelete", 0);
+            if (deptId != null) {
+                deptSub.eq("departmentId", deptId);
+            } else {
+                deptSub.eq("departmentId", -1L);
+            }
             wrapper.and((Consumer<QueryWrapper>) q -> q
                     .eq("creatorId", loginUser.getId())
                     .or((Consumer<QueryWrapper>) o -> o.in("id", joinSub))
-            );
+                    .or((Consumer<QueryWrapper>) o -> o.in("id", deptSub)));
+        } else {
+            QueryWrapper joinSub = QueryWrapper.create().select("scheduleId").from("schedule_participant").eq("isDelete", 0)
+                    .eq("userId", loginUser.getId());
+            wrapper.and((Consumer<QueryWrapper>) q -> q
+                    .eq("creatorId", loginUser.getId())
+                    .or((Consumer<QueryWrapper>) o -> o.in("id", joinSub)));
         }
-
         return wrapper.orderBy(request.getSortField(), "ascend".equals(request.getSortOrder()));
     }
 
@@ -238,19 +247,8 @@ public class ScheduleEventServiceImpl extends ServiceImpl<ScheduleEventMapper, S
         }
         ScheduleEventVO vo = new ScheduleEventVO();
         BeanUtil.copyProperties(scheduleEvent, vo);
-        // 参与人
-        List<ScheduleParticipant> participants = scheduleParticipantMapper.selectListByQuery(
-                QueryWrapper.create().eq("scheduleId", scheduleEvent.getId())
-        );
-        if (CollUtil.isNotEmpty(participants)) {
-            vo.setParticipantUserIdList(participants.stream()
-                    .map(ScheduleParticipant::getUserId)
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .collect(Collectors.toList()));
-        } else {
-            vo.setParticipantUserIdList(new ArrayList<>());
-        }
+        vo.setParticipantUserIdList(getParticipantIds(scheduleEvent.getId()));
+        vo.setDepartmentIdList(getDepartmentIds(scheduleEvent.getId()));
         return vo;
     }
 
@@ -259,31 +257,332 @@ public class ScheduleEventServiceImpl extends ServiceImpl<ScheduleEventMapper, S
         if (CollUtil.isEmpty(list)) {
             return new ArrayList<>();
         }
-        // 简化：逐条查参与人（数据量大时建议批量聚合）
         return list.stream().map(this::getScheduleEventVO).collect(Collectors.toList());
     }
 
-    private boolean isAdmin(User loginUser) {
-        UserRoleEnum roleEnum = UserRoleEnum.getEnumByValue(loginUser.getUserRole());
-        return UserRoleEnum.ADMIN.equals(roleEnum);
+    @Override
+    public List<ScheduleEventVO> listMyMonthSchedule(int year, int month, User loginUser) {
+        YearMonth ym = YearMonth.of(year, month);
+        LocalDateTime start = ym.atDay(1).atStartOfDay();
+        LocalDateTime end = ym.plusMonths(1).atDay(1).atStartOfDay();
+        List<ScheduleEvent> list = listAccessibleOverlapEvents(start, end, loginUser);
+        list.sort(Comparator.comparing(ScheduleEvent::getStartTime));
+        return getScheduleEventVOList(list);
     }
 
-    private void batchInsertParticipants(Long scheduleId, List<Long> userIds, Long ownerId) {
-        if (scheduleId == null || CollUtil.isEmpty(userIds)) {
+    @Override
+    public ScheduleCalendarDayVO getMyDaySchedule(LocalDate date, User loginUser) {
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = date.plusDays(1).atStartOfDay();
+        List<ScheduleEvent> list = listAccessibleOverlapEvents(start, end, loginUser);
+        list.sort(Comparator.comparing(ScheduleEvent::getStartTime));
+        ScheduleCalendarDayVO vo = new ScheduleCalendarDayVO();
+        vo.setDate(date.toString());
+        vo.setScheduleList(getScheduleEventVOList(list));
+        return vo;
+    }
+
+    private List<ScheduleEvent> listAccessibleOverlapEvents(LocalDateTime start, LocalDateTime end, User loginUser) {
+        ScheduleEventQueryRequest request = new ScheduleEventQueryRequest();
+        QueryWrapper wrapper = getQueryWrapper(request, loginUser);
+        wrapper.lt("startTime", end).gt("endTime", start);
+        return this.list(wrapper);
+    }
+
+    private RoleScope buildRoleScopeForCreate(List<Long> departmentIdList, List<Long> participantUserIdList, User loginUser) {
+        RoleScope scope = new RoleScope();
+        List<Long> participantIds = Optional.ofNullable(participantUserIdList).orElse(Collections.emptyList())
+                .stream().filter(Objects::nonNull).distinct().collect(Collectors.toCollection(ArrayList::new));
+        List<Long> departmentIds = Optional.ofNullable(departmentIdList).orElse(Collections.emptyList())
+                .stream().filter(Objects::nonNull).distinct().collect(Collectors.toCollection(ArrayList::new));
+        participantIds.add(loginUser.getId());
+        if (userService.isAdmin(loginUser)) {
+            for (Long departmentId : departmentIds) {
+                departmentService.getValidDepartment(departmentId);
+            }
+            for (Long userId : participantIds) {
+                User user = userService.getById(userId);
+                if (user == null) {
+                    throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "参与人不存在: " + userId);
+                }
+                if (!departmentIds.isEmpty() && user.getDepartmentId() != null && !departmentIds.contains(user.getDepartmentId())) {
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "参与人不在所选部门中: " + user.getUserName());
+                }
+                if (user.getDepartmentId() != null) {
+                    departmentIds.add(user.getDepartmentId());
+                }
+            }
+        } else if (userService.isManager(loginUser)) {
+            if (loginUser.getDepartmentId() == null) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "部门经理尚未分配部门");
+            }
+            if (CollUtil.isNotEmpty(departmentIds) && departmentIds.stream().anyMatch(id -> !Objects.equals(id, loginUser.getDepartmentId()))) {
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "部门经理只能选择自己部门");
+            }
+            departmentIds.clear();
+            departmentIds.add(loginUser.getDepartmentId());
+            for (Long userId : participantIds) {
+                User user = userService.getById(userId);
+                if (user == null) {
+                    throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "参与人不存在: " + userId);
+                }
+                userService.validateDepartmentUser(user, loginUser.getDepartmentId());
+            }
+        } else {
+            if (participantIds.stream().anyMatch(id -> !Objects.equals(id, loginUser.getId()))) {
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "普通员工只能为自己创建日程");
+            }
+            participantIds.clear();
+            participantIds.add(loginUser.getId());
+            departmentIds.clear();
+            if (loginUser.getDepartmentId() != null) {
+                departmentIds.add(loginUser.getDepartmentId());
+            }
+        }
+        scope.participantIds = participantIds.stream().distinct().collect(Collectors.toCollection(ArrayList::new));
+        scope.departmentIds = departmentIds.stream().distinct().collect(Collectors.toCollection(ArrayList::new));
+        return scope;
+    }
+
+    private String resolveScheduleType(String scheduleType, User loginUser) {
+        String finalType = StrUtil.blankToDefault(scheduleType, TYPE_PERSONAL);
+        if (!TYPE_PERSONAL.equals(finalType)
+                && !TYPE_MEETING.equals(finalType)
+                && !TYPE_ATTENDANCE.equals(finalType)
+                && !TYPE_COMPANY.equals(finalType)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "不支持的日程类型");
+        }
+        if (TYPE_COMPANY.equals(finalType) && !userService.isAdmin(loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "仅管理员可创建 company 日程");
+        }
+        return finalType;
+    }
+
+    private List<ScheduleConflictVO> findConflicts(Long excludeScheduleId, LocalDateTime startTime, LocalDateTime endTime,
+                                                   User loginUser, List<Long> participantIds) {
+        Map<String, ScheduleConflictVO> conflictMap = new LinkedHashMap<>();
+        addUserConflict(excludeScheduleId, startTime, endTime, loginUser.getId(), loginUser.getUserName(), "CREATOR", conflictMap);
+        for (Long userId : participantIds) {
+            if (Objects.equals(userId, loginUser.getId())) {
+                continue;
+            }
+            User user = userService.getById(userId);
+            if (user == null) {
+                continue;
+            }
+            addUserConflict(excludeScheduleId, startTime, endTime, userId, user.getUserName(), "PARTICIPANT", conflictMap);
+        }
+        return new ArrayList<>(conflictMap.values());
+    }
+
+    private void addUserConflict(Long excludeScheduleId, LocalDateTime startTime, LocalDateTime endTime,
+                                 Long userId, String userName, String conflictType,
+                                 Map<String, ScheduleConflictVO> conflictMap) {
+        QueryWrapper participantSub = QueryWrapper.create().select("scheduleId").from("schedule_participant")
+                .eq("userId", userId).eq("isDelete", 0);
+        QueryWrapper wrapper = QueryWrapper.create()
+                .lt("startTime", endTime)
+                .gt("endTime", startTime)
+                .eq("status", STATUS_NORMAL)
+                .eq("isDelete", 0)
+                .and((Consumer<QueryWrapper>) q -> q.eq("creatorId", userId)
+                        .or((Consumer<QueryWrapper>) o -> o.in("id", participantSub)));
+        if (excludeScheduleId != null) {
+            wrapper.ne("id", excludeScheduleId);
+        }
+        List<ScheduleEvent> conflictEvents = this.list(wrapper);
+        for (ScheduleEvent event : conflictEvents) {
+            String key = event.getId() + "_" + conflictType + "_" + userId;
+            if (conflictMap.containsKey(key)) {
+                continue;
+            }
+            ScheduleConflictVO vo = new ScheduleConflictVO();
+            vo.setScheduleId(event.getId());
+            vo.setTitle(event.getTitle());
+            vo.setStartTime(event.getStartTime());
+            vo.setEndTime(event.getEndTime());
+            vo.setConflictType(conflictType);
+            vo.setUserId(userId);
+            vo.setUserName(userName);
+            conflictMap.put(key, vo);
+        }
+    }
+
+    private ScheduleEventSaveVO buildConflictResult(List<ScheduleConflictVO> conflictList) {
+        ScheduleEventSaveVO result = new ScheduleEventSaveVO();
+        result.setSuccess(false);
+        result.setConflictDetected(true);
+        result.setConflictList(conflictList);
+        return result;
+    }
+
+    private void validateBasic(String title, LocalDateTime startTime, LocalDateTime endTime) {
+        if (StrUtil.isBlank(title) || title.length() > 256) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "标题为空或过长");
+        }
+        if (startTime == null || endTime == null || !endTime.isAfter(startTime)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "开始/结束时间不合法");
+        }
+    }
+
+    private void validateCheckInConfig(String scheduleType, Integer checkInEnabled, Double latitude,
+                                       Double longitude, Integer radiusMeters) {
+        String finalType = StrUtil.blankToDefault(scheduleType, TYPE_PERSONAL);
+        Integer finalEnabled = checkInEnabled == null ? (TYPE_ATTENDANCE.equals(finalType) ? 1 : 0) : checkInEnabled;
+        if (!TYPE_ATTENDANCE.equals(finalType) && Objects.equals(finalEnabled, 1)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "仅考勤事项支持定位签到");
+        }
+        if (!Objects.equals(finalEnabled, 1)) {
             return;
         }
-        LocalDateTime now = LocalDateTime.now();
-        for (Long userId : userIds) {
-            ScheduleParticipant p = new ScheduleParticipant();
-            p.setScheduleId(scheduleId);
-            p.setUserId(userId);
-            p.setParticipantRole(Objects.equals(userId, ownerId) ? "owner" : "participant");
-            p.setResponseStatus(Objects.equals(userId, ownerId) ? "accepted" : "pending");
-            p.setJoinTime(now);
-            p.setCreateTime(now);
-            p.setUpdateTime(now);
-            p.setIsDelete(0);
-            scheduleParticipantMapper.insert(p);
+        if (latitude == null || longitude == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "启用定位签到时必须设置签到坐标");
         }
+        if (radiusMeters != null && radiusMeters <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "签到半径必须大于0");
+        }
+    }
+
+    private boolean canEditSchedule(ScheduleEvent scheduleEvent, User loginUser) {
+        return userService.isAdmin(loginUser) || Objects.equals(scheduleEvent.getCreatorId(), loginUser.getId());
+    }
+
+    private void syncParticipants(Long scheduleId, List<Long> userIds, Long ownerId) {
+        if (scheduleId == null || scheduleId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "日程 id 非法");
+        }
+        Set<Long> targetUserIdSet = Optional.ofNullable(userIds)
+                .orElse(Collections.emptyList())
+                .stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (ownerId != null) {
+            targetUserIdSet.add(ownerId);
+        }
+
+        List<ScheduleParticipant> existingList = scheduleParticipantMapper.selectListByQuery(
+                QueryWrapper.create().eq("scheduleId", scheduleId)
+        );
+
+        Map<Long, ScheduleParticipant> existingMap = existingList.stream()
+                .filter(item -> item.getUserId() != null)
+                .collect(Collectors.toMap(
+                        ScheduleParticipant::getUserId,
+                        item -> item,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        LocalDateTime now = LocalDateTime.now();
+
+        for (Long userId : targetUserIdSet) {
+            ScheduleParticipant existing = existingMap.get(userId);
+            String finalRole = Objects.equals(userId, ownerId) ? "owner" : "participant";
+            if (existing != null) {
+                ScheduleParticipant update = new ScheduleParticipant();
+                update.setId(existing.getId());
+                update.setParticipantRole(finalRole);
+                update.setResponseStatus("pending");
+                update.setAttendanceStatus(existing.getAttendanceStatus() == null ? "not_checked" : existing.getAttendanceStatus());
+                update.setIsDelete(0);
+                update.setUpdateTime(now);
+                scheduleParticipantMapper.update(update);
+            } else {
+                ScheduleParticipant p = new ScheduleParticipant();
+                p.setScheduleId(scheduleId);
+                p.setUserId(userId);
+                p.setParticipantRole(finalRole);
+                p.setResponseStatus("pending");
+                p.setAttendanceStatus("not_checked");
+                p.setJoinTime(now);
+                p.setCreateTime(now);
+                p.setUpdateTime(now);
+                p.setIsDelete(0);
+                scheduleParticipantMapper.insert(p);
+            }
+        }
+
+        for (ScheduleParticipant existing : existingList) {
+            Long userId = existing.getUserId();
+            if (userId == null || targetUserIdSet.contains(userId)) {
+                continue;
+            }
+            ScheduleParticipant update = new ScheduleParticipant();
+            update.setId(existing.getId());
+            update.setIsDelete(1);
+            update.setUpdateTime(now);
+            scheduleParticipantMapper.update(update);
+        }
+    }
+
+    private void syncDepartments(Long scheduleId, List<Long> departmentIds) {
+        if (scheduleId == null || scheduleId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "日程 id 非法");
+        }
+        Set<Long> targetDepartmentIdSet = Optional.ofNullable(departmentIds)
+                .orElse(Collections.emptyList())
+                .stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        List<ScheduleDepartment> existingList = scheduleDepartmentMapper.selectListByQuery(
+                QueryWrapper.create().eq("scheduleId", scheduleId)
+        );
+
+        Map<Long, ScheduleDepartment> existingMap = existingList.stream()
+                .filter(item -> item.getDepartmentId() != null)
+                .collect(Collectors.toMap(
+                        ScheduleDepartment::getDepartmentId,
+                        item -> item,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        LocalDateTime now = LocalDateTime.now();
+        for (Long departmentId : targetDepartmentIdSet) {
+            ScheduleDepartment existing = existingMap.get(departmentId);
+            if (existing != null) {
+                ScheduleDepartment update = new ScheduleDepartment();
+                update.setId(existing.getId());
+                update.setIsDelete(0);
+                update.setUpdateTime(now);
+                scheduleDepartmentMapper.update(update);
+            } else {
+                ScheduleDepartment relation = new ScheduleDepartment();
+                relation.setScheduleId(scheduleId);
+                relation.setDepartmentId(departmentId);
+                relation.setCreateTime(now);
+                relation.setUpdateTime(now);
+                relation.setIsDelete(0);
+                scheduleDepartmentMapper.insert(relation);
+            }
+        }
+
+        for (ScheduleDepartment existing : existingList) {
+            Long departmentId = existing.getDepartmentId();
+            if (departmentId == null || targetDepartmentIdSet.contains(departmentId)) {
+                continue;
+            }
+            ScheduleDepartment update = new ScheduleDepartment();
+            update.setId(existing.getId());
+            update.setIsDelete(1);
+            update.setUpdateTime(now);
+            scheduleDepartmentMapper.update(update);
+        }
+    }
+
+    private List<Long> getParticipantIds(Long scheduleId) {
+        List<ScheduleParticipant> participants = scheduleParticipantMapper.selectListByQuery(QueryWrapper.create().eq("scheduleId", scheduleId).eq("isDelete", 0));
+        return participants.stream().map(ScheduleParticipant::getUserId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+    }
+
+    private List<Long> getDepartmentIds(Long scheduleId) {
+        List<ScheduleDepartment> departments = scheduleDepartmentMapper.selectListByQuery(QueryWrapper.create().eq("scheduleId", scheduleId).eq("isDelete", 0));
+        return departments.stream().map(ScheduleDepartment::getDepartmentId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+    }
+
+    private static class RoleScope {
+        private List<Long> participantIds = new ArrayList<>();
+        private List<Long> departmentIds = new ArrayList<>();
     }
 }

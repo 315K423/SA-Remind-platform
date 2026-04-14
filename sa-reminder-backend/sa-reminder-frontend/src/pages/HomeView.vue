@@ -1,37 +1,41 @@
 <template>
   <a-space direction="vertical" size="large" style="width: 100%">
     <a-card :bordered="false">
-      <a-row justify="space-between" align="middle">
-        <a-col>
+      <a-row justify="space-between" align="middle" :gutter="16">
+        <a-col :xs="24" :lg="16">
           <h2 style="margin: 0 0 8px">欢迎使用企业日程与考勤智能提醒平台</h2>
-          <div style="color: #8c8c8c">
-            面向管理员与员工的统一后台，支持日程管理、提醒策略配置和弹窗提醒处理。
+          <div style="color: #8c8c8c; margin-bottom: 8px">
+            围绕“日程—提醒—公告—定位签到—考勤管理”的闭环管理目标，支持管理员、部门经理与普通员工的分角色操作。
           </div>
+          <a-space wrap>
+            <a-tag color="blue">{{ getRoleLabel(loginUserStore.loginUser.userRole) }}</a-tag>
+            <a-tag v-if="loginUserStore.loginUser.departmentName" color="geekblue">
+              {{ loginUserStore.loginUser.departmentName }}
+            </a-tag>
+          </a-space>
         </a-col>
-        <a-col>
-          <a-space>
-            <a-button type="primary" @click="goTo('/schedule/manage')">进入日程管理</a-button>
-            <a-button @click="goTo('/reminder/rule')">设置提醒策略</a-button>
+        <a-col :xs="24" :lg="8" style="text-align: right">
+          <a-space wrap>
+            <a-button type="primary" @click="goTo('/schedule/my')">我的日程</a-button>
+            <a-button @click="goTo('/schedule/manage')">日程管理</a-button>
+            <a-button @click="goTo('/announcement/list')">公告通知</a-button>
           </a-space>
         </a-col>
       </a-row>
     </a-card>
 
     <a-row :gutter="16">
-      <a-col :xs="24" :md="8">
-        <a-card>
-          <a-statistic title="日程管理" value="事件创建 / 修改 / 删除" />
-        </a-card>
+      <a-col :xs="24" :md="6">
+        <a-card><a-statistic title="我的日程" value="月历 / 日视图" /></a-card>
       </a-col>
-      <a-col :xs="24" :md="8">
-        <a-card>
-          <a-statistic title="提醒策略" value="提前提醒 / 重复提醒" />
-        </a-card>
+      <a-col :xs="24" :md="6">
+        <a-card><a-statistic title="日程管理" value="创建 / 冲突校验" /></a-card>
       </a-col>
-      <a-col :xs="24" :md="8">
-        <a-card>
-          <a-statistic title="弹窗提醒" value="全局轮询 / 已读处理" />
-        </a-card>
+      <a-col :xs="24" :md="6">
+        <a-card><a-statistic title="提醒策略" value="重复提醒 / 定位签到" /></a-card>
+      </a-col>
+      <a-col :xs="24" :md="6">
+        <a-card><a-statistic title="公告 / 考勤" value="部门公告 / 签到管理" /></a-card>
       </a-col>
     </a-row>
 
@@ -39,10 +43,10 @@
       <a-col :xs="24" :lg="14">
         <a-card title="系统功能说明" :bordered="false">
           <a-timeline>
-            <a-timeline-item>员工可创建并维护个人日程，支持地点、全天事件、参与人等信息。</a-timeline-item>
-            <a-timeline-item>员工可为指定日程配置提醒时间、重复次数和重复间隔。</a-timeline-item>
-            <a-timeline-item>后端定时生成提醒任务，前端全局轮询后自动弹窗提示。</a-timeline-item>
-            <a-timeline-item>管理员可在用户管理页面统一查看和维护用户信息。</a-timeline-item>
+            <a-timeline-item>管理员可维护部门、员工归属、公告范围、考勤状态与跨部门协同日程。</a-timeline-item>
+            <a-timeline-item>部门经理仅可查看本部门相关日程，并为本部门成员安排参与人。</a-timeline-item>
+            <a-timeline-item>员工可在“我的日程”中查看自己创建和参与的日程，并进入当日 24 小时视图。</a-timeline-item>
+            <a-timeline-item>考勤事项支持签到地点、签到半径和浏览器定位签到，签到成功后会自动完成提醒确认。</a-timeline-item>
           </a-timeline>
         </a-card>
       </a-col>
@@ -62,15 +66,32 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useLoginUserStore } from '@/stores/loginUser'
+import { getRoleLabel, isAdmin } from '@/utils/app'
 
 const router = useRouter()
-const quickEntries = [
-  { title: '进入日程管理', path: '/schedule/manage' },
-  { title: '配置提醒策略', path: '/reminder/rule' },
-  { title: '查看弹窗提醒', path: '/reminder/popup' },
-  { title: '管理员用户管理', path: '/admin/userManage' },
-]
+const loginUserStore = useLoginUserStore()
+
+const quickEntries = computed(() => {
+  const common = [
+    { title: '进入我的日程', path: '/schedule/my' },
+    { title: '进入日程管理', path: '/schedule/manage' },
+    { title: '配置提醒策略', path: '/reminder/rule' },
+    { title: '查看提醒中心', path: '/reminder/popup' },
+    { title: '查看公告通知', path: '/announcement/list' },
+  ]
+  if (isAdmin(loginUserStore.loginUser.userRole)) {
+    common.push(
+        { title: '管理员用户管理', path: '/admin/userManage' },
+        { title: '管理员部门管理', path: '/admin/departmentManage' },
+        { title: '管理员公告管理', path: '/admin/announcementManage' },
+        { title: '管理员考勤管理', path: '/admin/attendanceManage' },
+    )
+  }
+  return common
+})
 
 const goTo = (path: string) => {
   router.push(path)

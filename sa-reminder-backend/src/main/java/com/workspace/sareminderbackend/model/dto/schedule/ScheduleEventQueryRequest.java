@@ -10,24 +10,13 @@ import java.time.LocalDateTime;
 public class ScheduleEventQueryRequest extends PageRequest implements Serializable {
 
     private Long id;
-
     private String title;
-
-    /**
-     * personal/company
-     */
     private String scheduleType;
-
-    /**
-     * 时间范围过滤（可选）
-     */
     private LocalDateTime startTimeFrom;
     private LocalDateTime startTimeTo;
-
-    /**
-     * 创建人（管理员可用）
-     */
     private Long creatorId;
+    private Long departmentId;
+    private Long participantUserId;
 
     private static final long serialVersionUID = 1L;
 }

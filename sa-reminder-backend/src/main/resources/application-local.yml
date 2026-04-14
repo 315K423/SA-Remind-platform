@@ -1,0 +1,9 @@
+spring:
+  mail:
+    host: smtp.163.com
+    username: allexu@163.com
+    password: EYmam342Hpt9vy6C
+  properties:
+    mail:
+      smtp:
+        auth: true

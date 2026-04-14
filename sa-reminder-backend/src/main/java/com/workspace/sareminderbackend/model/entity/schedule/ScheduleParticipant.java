@@ -36,17 +36,27 @@ public class ScheduleParticipant implements Serializable {
     @Column("userId")
     private Long userId;
 
-    /**
-     * owner/participant
-     */
     @Column("participantRole")
     private String participantRole;
 
-    /**
-     * pending/accepted/declined
-     */
     @Column("responseStatus")
     private String responseStatus;
+
+    /** 考勤状态：not_checked/checked_in */
+    @Column("attendanceStatus")
+    private String attendanceStatus;
+
+    @Column("checkInTime")
+    private LocalDateTime checkInTime;
+
+    @Column("checkInLatitude")
+    private Double checkInLatitude;
+
+    @Column("checkInLongitude")
+    private Double checkInLongitude;
+
+    @Column("checkInDistanceMeters")
+    private Double checkInDistanceMeters;
 
     @Column("joinTime")
     private LocalDateTime joinTime;

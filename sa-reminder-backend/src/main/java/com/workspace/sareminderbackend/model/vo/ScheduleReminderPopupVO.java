@@ -26,5 +26,16 @@ public class ScheduleReminderPopupVO implements Serializable {
 
     private String taskStatus;
 
+    /** 是否需要定位签到 */
+    private Boolean attendanceCheckRequired;
+
+    /** 签到地点 */
+    private String checkInAddress;
+
+    /** 签到半径 */
+    private Integer checkInRadiusMeters;
+
+    private String scheduleType;
+
     private static final long serialVersionUID = 1L;
 }

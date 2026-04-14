@@ -110,3 +110,96 @@ create table if not exists schedule_reminder_task
     index idx_user_status_time (userId, taskStatus, plannedRemindTime),
     index idx_scheduleId (scheduleId)
 ) comment '日程提醒任务' collate = utf8mb4_unicode_ci;
+
+ALTER TABLE `user`
+    ADD COLUMN departmentId BIGINT NULL COMMENT '所属部门ID' AFTER userRole,
+    ADD INDEX idx_departmentId (departmentId);
+
+create table if not exists department
+(
+    id          bigint                                 not null comment 'id' primary key,
+    name        varchar(128)                           not null comment '部门名称',
+    code        varchar(128)                           null comment '部门编码',
+    description varchar(512)                           null comment '部门描述',
+    createTime  datetime     default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime  datetime     default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete    tinyint      default 0                 not null comment '是否删除',
+    unique key uk_department_name (name)
+) comment '部门表' collate = utf8mb4_unicode_ci;
+
+create table if not exists schedule_department
+(
+    id           bigint                                 not null comment 'id' primary key,
+    scheduleId   bigint                                 not null comment '日程ID',
+    departmentId bigint                                 not null comment '部门ID',
+    createTime   datetime     default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime   datetime     default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete     tinyint      default 0                 not null comment '是否删除',
+    unique key uk_schedule_department (scheduleId, departmentId),
+    index idx_departmentId (departmentId)
+) comment '日程-部门关联表' collate = utf8mb4_unicode_ci;
+
+create table if not exists announcement
+(
+    id          bigint                                 not null comment 'id' primary key,
+    title       varchar(256)                           not null comment '公告标题',
+    content     varchar(4096)                          not null comment '公告内容',
+    scopeType   varchar(64)                            not null comment '通知范围 all/department',
+    status      varchar(64)  default 'published'       not null comment '状态',
+    publisherId bigint                                 not null comment '发布人',
+    publishTime datetime     default CURRENT_TIMESTAMP not null comment '发布时间',
+    createTime  datetime     default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime  datetime     default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete    tinyint      default 0                 not null comment '是否删除'
+) comment '公告表' collate = utf8mb4_unicode_ci;
+
+create table if not exists announcement_department
+(
+    id             bigint                                 not null comment 'id' primary key,
+    announcementId bigint                                 not null comment '公告ID',
+    departmentId   bigint                                 not null comment '部门ID',
+    createTime     datetime     default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime     datetime     default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete       tinyint      default 0                 not null comment '是否删除',
+    unique key uk_announcement_department (announcementId, departmentId)
+) comment '公告-部门关联表' collate = utf8mb4_unicode_ci;
+
+create table if not exists announcement_receiver
+(
+    id             bigint                                 not null comment 'id' primary key,
+    announcementId bigint                                 not null comment '公告ID',
+    userId         bigint                                 not null comment '接收用户ID',
+    receiveStatus  varchar(64)  default 'unread'         not null comment '接收状态 unread/read',
+    readTime       datetime                               null comment '阅读时间',
+    createTime     datetime     default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime     datetime     default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    isDelete       tinyint      default 0                 not null comment '是否删除',
+    unique key uk_announcement_user (announcementId, userId),
+    index idx_userId_receiveStatus (userId, receiveStatus)
+) comment '公告接收表' collate = utf8mb4_unicode_ci;
+
+
+ALTER TABLE schedule_event
+    ADD COLUMN checkInEnabled tinyint DEFAULT 0 NOT NULL COMMENT '是否启用定位签到 0/1' AFTER creatorId,
+    ADD COLUMN checkInAddress varchar(256) NULL COMMENT '签到地点描述' AFTER checkInEnabled,
+    ADD COLUMN checkInLatitude decimal(10,7) NULL COMMENT '签到目标纬度' AFTER checkInAddress,
+    ADD COLUMN checkInLongitude decimal(10,7) NULL COMMENT '签到目标经度' AFTER checkInLatitude,
+    ADD COLUMN checkInRadiusMeters int DEFAULT 200 NOT NULL COMMENT '签到半径(米)' AFTER checkInLongitude;
+
+ALTER TABLE schedule_participant
+    ADD COLUMN attendanceStatus varchar(64) DEFAULT 'not_checked' NOT NULL COMMENT '考勤状态 not_checked/checked_in' AFTER responseStatus,
+    ADD COLUMN checkInTime datetime NULL COMMENT '签到时间' AFTER attendanceStatus,
+    ADD COLUMN checkInLatitude decimal(10,7) NULL COMMENT '签到时纬度' AFTER checkInTime,
+    ADD COLUMN checkInLongitude decimal(10,7) NULL COMMENT '签到时经度' AFTER checkInLatitude,
+    ADD COLUMN checkInDistanceMeters decimal(10,2) NULL COMMENT '签到距离米数' AFTER checkInLongitude,
+    ADD INDEX idx_attendance_status (attendanceStatus),
+    ADD INDEX idx_check_in_time (checkInTime);
+
+UPDATE schedule_event
+SET checkInEnabled = 0,
+    checkInRadiusMeters = 200
+WHERE checkInEnabled IS NULL OR checkInRadiusMeters IS NULL;
+
+UPDATE schedule_participant
+SET attendanceStatus = 'not_checked'
+WHERE attendanceStatus IS NULL OR attendanceStatus = '';

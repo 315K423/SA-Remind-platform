@@ -4,9 +4,15 @@ import HomeView from '@/pages/HomeView.vue'
 import UserLoginPage from '@/pages/user/UserLoginPage.vue'
 import UserRegisterPage from '@/pages/user/UserRegisterPage.vue'
 import UserManagePage from '@/pages/admin/UserManagePage.vue'
+import DepartmentManagePage from '@/pages/admin/DepartmentManagePage.vue'
+import AnnouncementManagePage from '@/pages/admin/AnnouncementManagePage.vue'
+import AttendanceManagePage from '@/pages/admin/AttendanceManagePage.vue'
 import ScheduleManagePage from '@/pages/schedule/ScheduleManagePage.vue'
+import MyScheduleCalendarPage from '@/pages/schedule/MyScheduleCalendarPage.vue'
+import MyScheduleDayPage from '@/pages/schedule/MyScheduleDayPage.vue'
 import ReminderRulePage from '@/pages/reminder/ReminderRulePage.vue'
 import ReminderPopupPage from '@/pages/reminder/ReminderPopupPage.vue'
+import AnnouncementListPage from '@/pages/announcement/AnnouncementListPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -34,6 +40,18 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'schedule/my',
+          name: '我的日程',
+          component: MyScheduleCalendarPage,
+          meta: { requiresAuth: true },
+        },
+        {
+          path: 'schedule/my/day',
+          name: '当日日程',
+          component: MyScheduleDayPage,
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'schedule/manage',
           name: '日程管理',
           component: ScheduleManagePage,
@@ -52,10 +70,34 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'announcement/list',
+          name: '公告通知',
+          component: AnnouncementListPage,
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'admin/userManage',
           name: '用户管理',
           component: UserManagePage,
-          meta: { requiresAuth: true, role: 'admin' },
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
+          path: 'admin/departmentManage',
+          name: '部门管理',
+          component: DepartmentManagePage,
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
+          path: 'admin/announcementManage',
+          name: '公告管理',
+          component: AnnouncementManagePage,
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
+          path: 'admin/attendanceManage',
+          name: '考勤管理',
+          component: AttendanceManagePage,
+          meta: { requiresAuth: true, roles: ['admin'] },
         },
       ],
     },
