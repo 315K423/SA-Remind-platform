@@ -12,6 +12,9 @@
         <a-form-item label="账号" name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
           <a-input v-model:value="formState.userAccount" placeholder="请输入账号" size="large" />
         </a-form-item>
+        <a-form-item label="用户名" name="userName" :rules="[{ required: true, message: '请输入用户名' }]">
+          <a-input v-model:value="formState.userName" placeholder="请输入用户名" size="large" />
+        </a-form-item>
         <a-form-item
           label="密码"
           name="userPassword"
@@ -49,6 +52,7 @@ import { message } from 'ant-design-vue'
 const router = useRouter()
 const formState = reactive<API.UserRegisterRequest>({
   userAccount: '',
+  userName: '',
   userPassword: '',
   checkPassword: '',
 })

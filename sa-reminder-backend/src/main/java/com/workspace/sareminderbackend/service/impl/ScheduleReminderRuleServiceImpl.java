@@ -2,6 +2,7 @@ package com.workspace.sareminderbackend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.IdUtil;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.workspace.sareminderbackend.exception.BusinessException;
@@ -22,6 +23,7 @@ import com.workspace.sareminderbackend.service.ScheduleReminderRuleService;
 import com.workspace.sareminderbackend.service.UserService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -54,6 +56,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
     private UserService userService;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public long saveOrUpdateRule(ScheduleReminderRuleSaveRequest request, User loginUser) {
         if (request == null || request.getScheduleId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -131,6 +134,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteRule(long id, User loginUser) {
         ScheduleReminderRule rule = this.getById(id);
         if (rule == null) {
@@ -184,6 +188,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void scanAndDispatchOnce() {
         LocalDateTime now = LocalDateTime.now();
 
@@ -197,7 +202,6 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         for (ScheduleReminderRule rule : ruleList) {
             ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(rule.getScheduleId());
 
-            // 日程不存在、被删除、没有开始时间、已开始/已过期 -> 全部过期
             if (scheduleEvent == null
                     || (scheduleEvent.getIsDelete() != null && scheduleEvent.getIsDelete() == 1)
                     || scheduleEvent.getStartTime() == null
@@ -206,8 +210,6 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                 continue;
             }
 
-            // 只有当用户已经不再是参与人时，才过期
-            // 不再用 accepted 直接过期，避免 owner 或已确认用户导致提醒任务刚扫描就失效
             ScheduleParticipant participant = scheduleParticipantMapper.selectOneByQuery(
                     QueryWrapper.create()
                             .eq("scheduleId", rule.getScheduleId())
@@ -228,8 +230,8 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                 continue;
             }
 
-            // 到点后 pending -> sent
             if (TASK_PENDING.equals(latestTask.getTaskStatus())
+                    && latestTask.getPlannedRemindTime() != null
                     && !latestTask.getPlannedRemindTime().isAfter(now)) {
                 ScheduleReminderTask update = new ScheduleReminderTask();
                 update.setId(latestTask.getId());
@@ -241,7 +243,6 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                 latestTask = scheduleReminderTaskMapper.selectOneById(latestTask.getId());
             }
 
-            // 如果上一条仍是 sent，说明前端还未确认；按规则继续创建下一次提醒
             if (TASK_SENT.equals(latestTask.getTaskStatus())) {
                 Integer repeatCount = rule.getRepeatCount() == null ? 0 : rule.getRepeatCount();
                 if (latestTask.getRemindIndex() >= repeatCount) {
@@ -266,6 +267,15 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         }
     }
 
+    /**
+     * 重建首任务：
+     * 1. 先把该规则下现有任务逻辑删除
+     * 2. 再重建首任务
+     *
+     * 关键修复点：
+     * 后续 buildNextTask 不再使用普通 insert，而是 upsert。
+     * 即使数据库里已经存在相同 (ruleId, remindIndex) 的逻辑删除记录，也会被恢复并更新，不会再触发唯一键冲突。
+     */
     private void rebuildFirstTask(ScheduleReminderRule rule, ScheduleEvent scheduleEvent) {
         scheduleReminderTaskMapper.deleteByQuery(
                 QueryWrapper.create().eq("ruleId", rule.getId())
@@ -291,21 +301,35 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         buildNextTask(rule, scheduleEvent, 0, plannedTime);
     }
 
+    /**
+     * 关键修复点：
+     * 原来这里直接 insert，会因为逻辑删除记录仍占用唯一键 (ruleId, remindIndex) 而报 DuplicateKeyException。
+     * 现在改为 upsert：有则更新并恢复，无则插入。
+     */
     private void buildNextTask(ScheduleReminderRule rule, ScheduleEvent scheduleEvent, int remindIndex, LocalDateTime plannedTime) {
+        LocalDateTime now = LocalDateTime.now();
+
         ScheduleReminderTask task = new ScheduleReminderTask();
+        task.setId(IdUtil.getSnowflakeNextId());
         task.setRuleId(rule.getId());
         task.setScheduleId(scheduleEvent.getId());
         task.setUserId(rule.getUserId());
         task.setRemindIndex(remindIndex);
         task.setPlannedRemindTime(plannedTime);
+        task.setActualRemindTime(null);
         task.setTaskStatus(TASK_PENDING);
         task.setPopupTitle("日程提醒：" + scheduleEvent.getTitle());
         task.setPopupContent("你的日程《" + scheduleEvent.getTitle() + "》将于 " + scheduleEvent.getStartTime()
                 + " 开始，如未确认将按间隔继续提醒。");
-        task.setCreateTime(LocalDateTime.now());
-        task.setUpdateTime(LocalDateTime.now());
+        task.setReadTime(null);
+        task.setCreateTime(now);
+        task.setUpdateTime(now);
         task.setIsDelete(0);
-        scheduleReminderTaskMapper.insert(task);
+
+        int affected = scheduleReminderTaskMapper.upsertTask(task);
+        if (affected <= 0) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "生成提醒任务失败");
+        }
     }
 
     private ScheduleReminderTask findLatestTask(Long ruleId) {

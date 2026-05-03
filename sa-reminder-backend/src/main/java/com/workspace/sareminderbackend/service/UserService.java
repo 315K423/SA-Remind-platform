@@ -12,7 +12,7 @@ import java.util.List;
 
 public interface UserService extends IService<User> {
 
-    long userRegister(String userAccount, String userPassword, String checkPassword);
+    long userRegister(String userAccount,String userName, String userPassword, String checkPassword);
 
     LoginUserVO getLoginUserVO(User user);
 

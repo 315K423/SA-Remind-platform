@@ -16,7 +16,6 @@
         </a-col>
         <a-col :xs="24" :lg="8" style="text-align: right">
           <a-space wrap>
-            <a-button type="primary" @click="goTo('/schedule/my')">我的日程</a-button>
             <a-button @click="goTo('/schedule/manage')">日程管理</a-button>
             <a-button @click="goTo('/announcement/list')">公告通知</a-button>
           </a-space>
@@ -24,6 +23,7 @@
       </a-row>
     </a-card>
 
+<!--    这里进行修改 - 改为月日程表-->
     <a-row :gutter="16">
       <a-col :xs="24" :md="6">
         <a-card><a-statistic title="我的日程" value="月历 / 日视图" /></a-card>
@@ -50,17 +50,6 @@
           </a-timeline>
         </a-card>
       </a-col>
-      <a-col :xs="24" :lg="10">
-        <a-card title="快捷入口" :bordered="false">
-          <a-list :data-source="quickEntries" bordered>
-            <template #renderItem="{ item }">
-              <a-list-item>
-                <a-button type="link" @click="goTo(item.path)">{{ item.title }}</a-button>
-              </a-list-item>
-            </template>
-          </a-list>
-        </a-card>
-      </a-col>
     </a-row>
   </a-space>
 </template>
@@ -73,25 +62,6 @@ import { getRoleLabel, isAdmin } from '@/utils/app'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
-
-const quickEntries = computed(() => {
-  const common = [
-    { title: '进入我的日程', path: '/schedule/my' },
-    { title: '进入日程管理', path: '/schedule/manage' },
-    { title: '配置提醒策略', path: '/reminder/rule' },
-    { title: '查看提醒中心', path: '/reminder/popup' },
-    { title: '查看公告通知', path: '/announcement/list' },
-  ]
-  if (isAdmin(loginUserStore.loginUser.userRole)) {
-    common.push(
-        { title: '管理员用户管理', path: '/admin/userManage' },
-        { title: '管理员部门管理', path: '/admin/departmentManage' },
-        { title: '管理员公告管理', path: '/admin/announcementManage' },
-        { title: '管理员考勤管理', path: '/admin/attendanceManage' },
-    )
-  }
-  return common
-})
 
 const goTo = (path: string) => {
   router.push(path)

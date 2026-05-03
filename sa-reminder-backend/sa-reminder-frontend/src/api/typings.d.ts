@@ -309,6 +309,12 @@ declare namespace API {
     optimizeCountQuery?: boolean
   }
 
+  type scanParams = {
+    to: string
+    subject: string
+    content: string
+  }
+
   type ScheduleAttendanceCheckInRequest = {
     taskId?: number
     latitude?: number
@@ -560,6 +566,7 @@ declare namespace API {
 
   type UserRegisterRequest = {
     userAccount?: string
+    userName?: string
     userPassword?: string
     checkPassword?: string
   }

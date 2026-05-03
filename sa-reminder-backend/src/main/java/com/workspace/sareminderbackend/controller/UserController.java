@@ -37,7 +37,7 @@ public class UserController {
     @PostMapping("/register")
     public BaseResponse<Long> userRegister(@RequestBody UserRegisterRequest userRegisterRequest) {
         ThrowUtils.throwIf(userRegisterRequest == null, ErrorCode.PARAMS_ERROR);
-        long result = userService.userRegister(userRegisterRequest.getUserAccount(), userRegisterRequest.getUserPassword(),
+        long result = userService.userRegister(userRegisterRequest.getUserAccount(),userRegisterRequest.getUserName(),userRegisterRequest.getUserPassword(),
                 userRegisterRequest.getCheckPassword());
         return ResultUtils.success(result);
     }

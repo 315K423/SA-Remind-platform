@@ -60,7 +60,7 @@ watch(
 
 const commonItems: MenuProps['items'] = [
   { key: '/', icon: () => h(HomeOutlined), label: '工作台', title: '工作台' },
-  { key: '/schedule/my', icon: () => h(CalendarOutlined), label: '我的日程', title: '我的日程' },
+  // { key: '/schedule/my', icon: () => h(CalendarOutlined), label: '我的日程', title: '我的日程' },
   { key: '/schedule/manage', icon: () => h(CalendarOutlined), label: '日程管理', title: '日程管理' },
   { key: '/reminder/rule', icon: () => h(BellOutlined), label: '提醒策略', title: '提醒策略' },
   { key: '/reminder/popup', icon: () => h(BellOutlined), label: '弹窗提醒', title: '弹窗提醒' },
