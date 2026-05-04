@@ -24,20 +24,21 @@
     </a-card>
 
 <!--    这里进行修改 - 改为月日程表-->
-    <a-row :gutter="16">
-      <a-col :xs="24" :md="6">
-        <a-card><a-statistic title="我的日程" value="月历 / 日视图" /></a-card>
-      </a-col>
-      <a-col :xs="24" :md="6">
-        <a-card><a-statistic title="日程管理" value="创建 / 冲突校验" /></a-card>
-      </a-col>
-      <a-col :xs="24" :md="6">
-        <a-card><a-statistic title="提醒策略" value="重复提醒 / 定位签到" /></a-card>
-      </a-col>
-      <a-col :xs="24" :md="6">
-        <a-card><a-statistic title="公告 / 考勤" value="部门公告 / 签到管理" /></a-card>
-      </a-col>
-    </a-row>
+<!--    <a-row :gutter="16">-->
+<!--      <a-col :xs="24" :md="6">-->
+<!--        <a-card><a-statistic title="我的日程" value="月历 / 日视图" /></a-card>-->
+<!--      </a-col>-->
+<!--      <a-col :xs="24" :md="6">-->
+<!--        <a-card><a-statistic title="日程管理" value="创建 / 冲突校验" /></a-card>-->
+<!--      </a-col>-->
+<!--      <a-col :xs="24" :md="6">-->
+<!--        <a-card><a-statistic title="提醒策略" value="重复提醒 / 定位签到" /></a-card>-->
+<!--      </a-col>-->
+<!--      <a-col :xs="24" :md="6">-->
+<!--        <a-card><a-statistic title="公告 / 考勤" value="部门公告 / 签到管理" /></a-card>-->
+<!--      </a-col>-->
+<!--    </a-row>-->
+    <MyScheduleCalendarPage />
 
     <a-row :gutter="16">
       <a-col :xs="24" :lg="14">
@@ -59,6 +60,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { getRoleLabel, isAdmin } from '@/utils/app'
+import MyScheduleCalendarPage from "@/pages/schedule/MyScheduleCalendarPage.vue";
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()

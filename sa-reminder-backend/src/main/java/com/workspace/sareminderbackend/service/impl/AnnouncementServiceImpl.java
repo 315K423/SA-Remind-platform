@@ -23,6 +23,7 @@ import com.workspace.sareminderbackend.service.DepartmentService;
 import com.workspace.sareminderbackend.service.UserService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -50,6 +51,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
     private DepartmentService departmentService;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public long addAnnouncement(AnnouncementAddRequest request, User loginUser) {
         validateRequest(request.getTitle(), request.getContent(), request.getScopeType(), request.getDepartmentIdList());
 
@@ -76,6 +78,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean updateAnnouncement(AnnouncementUpdateRequest request, User loginUser) {
         if (request == null || request.getId() == null || request.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "公告 id 非法");
@@ -111,6 +114,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteAnnouncement(long id) {
         announcementDepartmentMapper.deleteByQuery(
                 QueryWrapper.create().eq("announcementId", id)
@@ -329,9 +333,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
      * 只同步公告-部门关系，不再生成接收人快照
      */
     private void syncDepartmentRelations(Long announcementId, String scopeType, List<Long> departmentIdList) {
-        announcementDepartmentMapper.deleteByQuery(
-                QueryWrapper.create().eq("announcementId", announcementId)
-        );
+        announcementDepartmentMapper.deleteByAnnouncementIdPhysically(announcementId);
 
         if (SCOPE_ALL.equals(scopeType)) {
             return;

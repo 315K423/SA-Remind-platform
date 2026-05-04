@@ -73,7 +73,16 @@ const handlePanelChange = async (value: Dayjs) => {
   await fetchMonthData(value)
 }
 
-const handleSelect = (value: Dayjs) => {
+type CalenderSelectInfo = {
+  source?: 'year' | 'month' | 'date' | 'customize'
+}
+const handleSelect = async (value: Dayjs, info?: CalenderSelectInfo) => {
+  // 只有点击日期单元格时才进入日日成页面：切换年份/月份之刷新月历数据
+  if (info?.source && info.source !== 'date') {
+    calendarValue.value = value
+    await fetchMonthData(value)
+    return
+  }
   openDay(value)
 }
 
