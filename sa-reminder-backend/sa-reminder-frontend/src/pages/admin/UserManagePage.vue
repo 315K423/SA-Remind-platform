@@ -60,69 +60,23 @@
       </a-table>
     </a-space>
 
-    <a-modal
-      :open="modalVisible"
-      :title="isEdit ? '编辑用户' : '新增用户'"
-      width="640px"
-      destroy-on-close
-      @ok="submitForm"
-      @cancel="closeModal"
-    >
-      <a-form layout="vertical" :model="formState">
-        <a-row :gutter="16">
-          <a-col :span="12">
-            <a-form-item label="用户名" required>
-              <a-input v-model:value="formState.userName" placeholder="请输入用户名" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="账号" :required="!isEdit">
-              <a-input v-model:value="formState.userAccount" :disabled="isEdit" placeholder="请输入账号" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="角色" required>
-              <a-select v-model:value="formState.userRole">
-                <a-select-option value="admin">管理员</a-select-option>
-                <a-select-option value="manager">部门经理</a-select-option>
-                <a-select-option value="user">普通员工</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-          <a-col :span="12">
-            <a-form-item label="所属部门">
-              <a-select
-                v-model:value="formState.departmentId"
-                :options="departmentOptions"
-                allow-clear
-                show-search
-                option-filter-prop="label"
-                placeholder="请选择部门"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :span="24">
-            <a-form-item label="头像地址">
-              <a-input v-model:value="formState.userAvatar" placeholder="请输入头像 URL" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="24">
-            <a-form-item label="简介">
-              <a-textarea v-model:value="formState.userProfile" :rows="3" placeholder="请输入简介" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-      </a-form>
-    </a-modal>
+    <UserEditModal
+      v-model:open="userModalVisible"
+      :mode="userModalMode"
+      :user="currentUser"
+      :department-options="departmentOptions"
+      @success="handleUserSaved"
+    />
   </a-card>
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { addUser, deleteUser, listUserVoByPage, updateUser } from '@/api/userController'
+import { computed, onMounted, ref, reactive } from 'vue'
+import { deleteUser, listUserVoByPage } from '@/api/userController'
 import { listPage1 as listDepartmentPage } from '@/api/departmentController'
 import { message } from 'ant-design-vue'
 import { getRoleLabel } from '@/utils/app'
+import UserEditModal from '@/components/UserEditModel.vue'
 
 const columns = [
   { title: 'ID', dataIndex: 'id' },
@@ -138,23 +92,14 @@ const columns = [
 
 const data = ref<API.UserVO[]>([])
 const total = ref(0)
-const modalVisible = ref(false)
-const isEdit = ref(false)
-const departmentOptions = ref<{ label: string; value: number }[]>([])
+const departmentOptions = ref<{ label: string; value: string | number }[]>([])
+const userModalVisible = ref(false)
+const userModalMode = ref<'add' | 'edit'>('add')
+const currentUser = ref<API.UserVO | null>(null)
 
 const searchParams = reactive<API.UserQueryRequest>({
   pageNum: 1,
   pageSize: 10,
-})
-
-const formState = reactive<API.UserAddRequest & API.UserUpdateRequest>({
-  id: undefined,
-  userAccount: '',
-  userName: '',
-  userAvatar: '',
-  userProfile: '',
-  userRole: 'user',
-  departmentId: undefined,
 })
 
 const loadDepartments = async () => {
@@ -162,7 +107,8 @@ const loadDepartments = async () => {
   if (res.data.code === 0 && res.data.data) {
     departmentOptions.value = (res.data.data.records ?? []).map((item) => ({
       label: item.name || `部门${item.id}`,
-      value: item.id as number,
+      // 后端 Long 可能会以字符串形式返回，这里不强转 number，避免大整数精度丢失。
+      value: item.id as any,
     }))
   }
 }
@@ -179,7 +125,7 @@ const fetchData = async () => {
 
 const doSearch = () => {
   searchParams.pageNum = 1
-  fetchData()
+  void fetchData()
 }
 
 const resetSearch = () => {
@@ -191,70 +137,33 @@ const resetSearch = () => {
     userRole: undefined,
     departmentId: undefined,
   })
-  fetchData()
-}
-
-const resetForm = () => {
-  Object.assign(formState, {
-    id: undefined,
-    userAccount: '',
-    userName: '',
-    userAvatar: '',
-    userProfile: '',
-    userRole: 'user',
-    departmentId: undefined,
-  })
+  void fetchData()
 }
 
 const openAddModal = () => {
-  resetForm()
-  isEdit.value = false
-  modalVisible.value = true
+  currentUser.value = null
+  userModalMode.value = 'add'
+  userModalVisible.value = true
 }
 
 const openEditModal = (record: API.UserVO) => {
-  Object.assign(formState, record)
-  isEdit.value = true
-  modalVisible.value = true
+  currentUser.value = { ...record }
+  userModalMode.value = 'edit'
+  userModalVisible.value = true
 }
 
-const closeModal = () => {
-  modalVisible.value = false
-  resetForm()
+const handleUserSaved = () => {
+  void fetchData()
 }
 
-const submitForm = async () => {
-  if (!formState.userName) {
-    message.warning('请输入用户名')
-    return
-  }
-  if (!isEdit.value && !formState.userAccount) {
-    message.warning('请输入账号')
-    return
-  }
-
-  const payload = {
-    ...formState,
-    departmentId: formState.departmentId || undefined,
-  }
-  const res = isEdit.value ? await updateUser(payload) : await addUser(payload)
-  if (res.data.code === 0) {
-    message.success(isEdit.value ? '更新成功' : '新增成功')
-    closeModal()
-    fetchData()
-  } else {
-    message.error(res.data.message || '提交失败')
-  }
-}
-
-const doDelete = async (id?: number) => {
+const doDelete = async (id?: API.UserVO['id']) => {
   if (!id) return
-  const res = await deleteUser({ id })
+  const res = await deleteUser({ id: id as any })
   if (res.data.code === 0) {
     message.success('删除成功')
-    fetchData()
+    await fetchData()
   } else {
-    message.error('删除失败')
+    message.error(res.data.message || '删除失败')
   }
 }
 
@@ -275,7 +184,7 @@ const pagination = computed(() => ({
 const doTableChange = (page: any) => {
   searchParams.pageNum = page.current
   searchParams.pageSize = page.pageSize
-  fetchData()
+  void fetchData()
 }
 
 onMounted(async () => {

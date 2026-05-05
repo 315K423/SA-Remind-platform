@@ -21,7 +21,7 @@
         <template #dateCellRender="{ current }">
           <ul class="events">
             <li v-for="item in getListData(current)" :key="`${item.id}-${item.startTime}`" @click.stop="openDay(current)">
-              <a-badge :status="item.status === 'cancelled' ? 'error' : 'success'" :text="item.title" />
+              <a-badge :status="getScheduleBadgeStatus(item)" :text="item.title" />
             </li>
           </ul>
         </template>
@@ -64,6 +64,29 @@ const getListData = (current: Dayjs) => {
   return scheduleMap.value[current.format('YYYY-MM-DD')] || []
 }
 
+const getScheduleBadgeStatus = (record: API.ScheduleEventVO) => {
+  if (record.status === 'cancelled') {
+    return 'error'
+  }
+
+  const now = dayjs()
+  const startTime = record.startTime ? dayjs(record.startTime) : null
+  const endTime = record.endTime ? dayjs(record.endTime) : null
+
+  // 结束时间早于当前时间，说明日程已经过期，显示灰色圆点。
+  if (endTime && endTime.isBefore(now)) {
+    return 'default'
+  }
+
+  // 开始时间已到，但结束时间未到，说明日程正在进行，显示蓝色圆点。
+  if (startTime && !startTime.isAfter(now) && (!endTime || endTime.isAfter(now))) {
+    return 'processing'
+  }
+
+  // 未开始的正常日程仍然显示绿色圆点。
+  return 'success'
+}
+
 const openDay = (value: Dayjs) => {
   router.push(`/schedule/my/day?date=${value.format('YYYY-MM-DD')}`)
 }
@@ -73,11 +96,12 @@ const handlePanelChange = async (value: Dayjs) => {
   await fetchMonthData(value)
 }
 
-type CalenderSelectInfo = {
+type CalendarSelectInfo = {
   source?: 'year' | 'month' | 'date' | 'customize'
 }
-const handleSelect = async (value: Dayjs, info?: CalenderSelectInfo) => {
-  // 只有点击日期单元格时才进入日日成页面：切换年份/月份之刷新月历数据
+
+const handleSelect = async (value: Dayjs, info?: CalendarSelectInfo) => {
+  // 只有点击日期单元格时才进入日日程页；切换年份/月只刷新月历数据。
   if (info?.source && info.source !== 'date') {
     calendarValue.value = value
     await fetchMonthData(value)

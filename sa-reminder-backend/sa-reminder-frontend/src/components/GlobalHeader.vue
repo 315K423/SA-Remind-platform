@@ -26,6 +26,7 @@
             <a-menu>
               <a-menu-item @click="goHome">返回工作台</a-menu-item>
               <a-menu-item @click="goAnnouncement">公告通知</a-menu-item>
+              <a-menu-item @click="goProfile">个人中心</a-menu-item>
               <a-menu-item danger @click="doLogout">退出登录</a-menu-item>
             </a-menu>
           </template>
@@ -55,6 +56,10 @@ const goMySchedule = () => {
 
 const goAnnouncement = () => {
   router.push('/announcement/list')
+}
+
+const goProfile = () => {
+  router.push('/user/profile')
 }
 
 const doLogout = async () => {

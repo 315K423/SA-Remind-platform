@@ -13,6 +13,7 @@ import MyScheduleDayPage from '@/pages/schedule/MyScheduleDayPage.vue'
 import ReminderRulePage from '@/pages/reminder/ReminderRulePage.vue'
 import ReminderPopupPage from '@/pages/reminder/ReminderPopupPage.vue'
 import AnnouncementListPage from '@/pages/announcement/AnnouncementListPage.vue'
+import UserProfilePage from '@/pages/user/UserProfilePage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -98,6 +99,12 @@ const router = createRouter({
           name: '考勤管理',
           component: AttendanceManagePage,
           meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
+          path: 'user/profile',
+          name: '个人中心',
+          component: UserProfilePage,
+          meta: { requiresAuth: true },
         },
       ],
     },

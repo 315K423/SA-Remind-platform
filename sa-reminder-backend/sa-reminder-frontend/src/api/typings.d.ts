@@ -154,6 +154,12 @@ declare namespace API {
     message?: string
   }
 
+  type BaseResponseString = {
+    code?: number
+    data?: string
+    message?: string
+  }
+
   type BaseResponseUser = {
     code?: number
     data?: User
@@ -520,6 +526,10 @@ declare namespace API {
     status?: string
     createTime?: string
     updateTime?: string
+  }
+
+  type uploadAvatarParams = {
+    userAccount?: string
   }
 
   type User = {

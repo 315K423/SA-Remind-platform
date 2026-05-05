@@ -111,9 +111,9 @@
             <a-form-item label="开始时间" required>
               <a-date-picker
                   v-model:value="formState.startTime"
-                  show-time
-                  value-format="YYYY-MM-DDTHH:mm:ss"
-                  format="YYYY-MM-DD HH:mm:ss"
+                  :show-time="{ format : 'HH:mm' }"
+                  value-format="YYYY-MM-DDTHH:mm"
+                  format="YYYY-MM-DD HH:mm"
                   style="width: 100%"
                   placeholder="请选择开始时间"
               />
@@ -124,9 +124,9 @@
             <a-form-item label="结束时间">
               <a-date-picker
                   v-model:value="formState.endTime"
-                  show-time
-                  value-format="YYYY-MM-DDTHH:mm:ss"
-                  format="YYYY-MM-DD HH:mm:ss"
+                  :show-time="{ format : 'HH:mm' }"
+                  value-format="YYYY-MM-DDTHH:mm"
+                  format="YYYY-MM-DD HH:mm"
                   style="width: 100%"
                   placeholder="请选择结束时间"
               />
@@ -646,8 +646,8 @@ const fillCurrentLocation = async () => {
 const buildSubmitParams = () => {
   const payload: Record<string, any> = {
     ...formState,
-    startTime: formState.startTime ? dayjs(formState.startTime).format('YYYY-MM-DDTHH:mm:ss') : undefined,
-    endTime: formState.endTime ? dayjs(formState.endTime).format('YYYY-MM-DDTHH:mm:ss') : undefined,
+    startTime: formState.startTime ? dayjs(formState.startTime).format('YYYY-MM-DDTHH:mm') : undefined,
+    endTime: formState.endTime ? dayjs(formState.endTime).format('YYYY-MM-DDTHH:mm') : undefined,
     departmentIdList:
         isManagerRole.value && loginUserStore.loginUser.departmentId
             ? [String(loginUserStore.loginUser.departmentId)]

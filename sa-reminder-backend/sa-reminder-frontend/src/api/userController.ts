@@ -14,6 +14,26 @@ export async function addUser(body: API.UserAddRequest, options?: { [key: string
   })
 }
 
+/** 此处后端没有提供注释 POST /user/avatar/upload */
+export async function uploadAvatar(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.uploadAvatarParams,
+  body: {},
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseString>('/user/avatar/upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    params: {
+      ...params,
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 此处后端没有提供注释 POST /user/delete */
 export async function deleteUser(body: API.DeleteRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/user/delete', {
@@ -117,6 +137,18 @@ export async function userRegister(
 /** 此处后端没有提供注释 POST /user/update */
 export async function updateUser(body: API.UserUpdateRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/user/update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 此处后端没有提供注释 POST /user/update/my */
+export async function updateMyUser(body: API.UserUpdateRequest, options?: { [key: string]: any }) {
+  return request<API.BaseResponseLoginUserVO>('/user/update/my', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
