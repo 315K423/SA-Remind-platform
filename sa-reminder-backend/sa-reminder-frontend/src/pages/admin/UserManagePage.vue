@@ -31,6 +31,7 @@
             <a-button type="primary" html-type="submit">搜索</a-button>
             <a-button @click="resetSearch">重置</a-button>
             <a-button @click="openAddModal">新增用户</a-button>
+            <a-button @click="handleExportExcel">导出 Excel</a-button>
           </a-space>
         </a-form-item>
       </a-form>
@@ -72,7 +73,7 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, ref, reactive } from 'vue'
-import { deleteUser, listUserVoByPage } from '@/api/userController'
+import { deleteUser, exportUserExcel, listUserVoByPage } from '@/api/userController'
 import { listPage1 as listDepartmentPage } from '@/api/departmentController'
 import { message } from 'ant-design-vue'
 import { getRoleLabel } from '@/utils/app'
@@ -185,6 +186,36 @@ const doTableChange = (page: any) => {
   searchParams.pageNum = page.current
   searchParams.pageSize = page.pageSize
   void fetchData()
+}
+
+const handleExportExcel = async () => {
+  const exportParams: API.UserQueryRequest = {
+    id: searchParams.id,
+    userAccount: searchParams.userAccount,
+    userName: searchParams.userName,
+    userProfile: searchParams.userProfile,
+    userRole: searchParams.userRole,
+    departmentId: searchParams.departmentId,
+    sortField: searchParams.sortField,
+    sortOrder: searchParams.sortOrder,
+  }
+
+  const res = await exportUserExcel(
+    { userQueryRequest: exportParams },
+    { responseType: 'blob' },
+  )
+  const blob = new Blob([res.data], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `用户数据_${new Date().toISOString().slice(0, 10)}.xlsx`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+  message.success('用户数据导出成功')
 }
 
 onMounted(async () => {

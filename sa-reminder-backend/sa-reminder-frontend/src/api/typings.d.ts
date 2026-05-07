@@ -18,6 +18,20 @@ declare namespace API {
     departmentId?: number
   }
 
+  type AnnouncementReadRateVO = {
+    announcementId?: number
+    title?: string
+    scopeType?: string
+    status?: string
+    publisherId?: number
+    publisherName?: string
+    publishTime?: string
+    receiverCount?: number
+    readCount?: number
+    unreadCount?: number
+    readRate?: number
+  }
+
   type AnnouncementUpdateRequest = {
     id?: number
     title?: string
@@ -88,6 +102,12 @@ declare namespace API {
     message?: string
   }
 
+  type BaseResponsePageAnnouncementReadRateVO = {
+    code?: number
+    data?: PageAnnouncementReadRateVO
+    message?: string
+  }
+
   type BaseResponsePageAnnouncementVO = {
     code?: number
     data?: PageAnnouncementVO
@@ -97,6 +117,12 @@ declare namespace API {
   type BaseResponsePageDepartmentVO = {
     code?: number
     data?: PageDepartmentVO
+    message?: string
+  }
+
+  type BaseResponsePageScheduleAttendanceRateVO = {
+    code?: number
+    data?: PageScheduleAttendanceRateVO
     message?: string
   }
 
@@ -219,6 +245,10 @@ declare namespace API {
     createTime?: string
   }
 
+  type exportUserExcelParams = {
+    userQueryRequest: UserQueryRequest
+  }
+
   type getById1Params = {
     id: number
   }
@@ -261,6 +291,15 @@ declare namespace API {
     updateTime?: string
   }
 
+  type PageAnnouncementReadRateVO = {
+    records?: AnnouncementReadRateVO[]
+    pageNumber?: number
+    pageSize?: number
+    totalPage?: number
+    totalRow?: number
+    optimizeCountQuery?: boolean
+  }
+
   type PageAnnouncementVO = {
     records?: AnnouncementVO[]
     pageNumber?: number
@@ -272,6 +311,15 @@ declare namespace API {
 
   type PageDepartmentVO = {
     records?: DepartmentVO[]
+    pageNumber?: number
+    pageSize?: number
+    totalPage?: number
+    totalRow?: number
+    optimizeCountQuery?: boolean
+  }
+
+  type PageScheduleAttendanceRateVO = {
+    records?: ScheduleAttendanceRateVO[]
     pageNumber?: number
     pageSize?: number
     totalPage?: number
@@ -345,6 +393,19 @@ declare namespace API {
     scheduleTitle?: string
     userName?: string
     attendanceStatus?: string
+  }
+
+  type ScheduleAttendanceRateVO = {
+    scheduleId?: number
+    scheduleTitle?: string
+    scheduleStartTime?: string
+    scheduleEndTime?: string
+    participantCount?: number
+    checkedCount?: number
+    uncheckedCount?: number
+    attendanceRate?: number
+    checkInAddress?: string
+    checkInRadiusMeters?: number
   }
 
   type ScheduleAttendanceUpdateRequest = {

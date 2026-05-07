@@ -5,6 +5,7 @@
       <a-menu
         theme="dark"
         mode="inline"
+        v-model:openKeys="openKeys"
         :selectedKeys="selectedKeys"
         :items="menuItems"
         @click="onMenuClick"
@@ -35,6 +36,7 @@ import {
   NotificationOutlined,
   ApartmentOutlined,
   AuditOutlined,
+  PieChartOutlined,
 } from '@ant-design/icons-vue'
 import { Modal, type MenuProps } from 'ant-design-vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -50,11 +52,19 @@ const route = useRoute()
 const loginUserStore = useLoginUserStore()
 const collapsed = ref(false)
 const selectedKeys = ref<string[]>([route.path])
+const openKeys = ref<string[]>([])
+
+const getDefaultOpenKeys = (path: string) => {
+  if (path.startsWith('/admin/announcement')) return ['admin-announcement']
+  if (path.startsWith('/admin/attendance')) return ['admin-attendance']
+  return []
+}
 
 watch(
   () => route.path,
   (newPath) => {
     selectedKeys.value = [newPath]
+    openKeys.value = getDefaultOpenKeys(newPath)
   },
   { immediate: true },
 )
@@ -82,16 +92,24 @@ const adminItems: MenuProps['items'] = [
     title: '部门管理',
   },
   {
-    key: '/admin/announcementManage',
+    key: 'admin-announcement',
     icon: () => h(NotificationOutlined),
     label: '公告管理',
     title: '公告管理',
+    children: [
+      { key: '/admin/announcementManage', label: '公告列表', title: '公告列表' },
+      { key: '/admin/announcementReadRate', label: '读取率统计', title: '读取率统计' },
+    ],
   },
   {
-    key: '/admin/attendanceManage',
+    key: 'admin-attendance',
     icon: () => h(AuditOutlined),
     label: '考勤管理',
     title: '考勤管理',
+    children: [
+      { key: '/admin/attendanceManage', label: '考勤记录', title: '考勤记录' },
+      { key: '/admin/attendanceRate', icon: () => h(PieChartOutlined), label: '考勤率统计', title: '考勤率统计' },
+    ],
   },
 ]
 

@@ -6,7 +6,9 @@ import UserRegisterPage from '@/pages/user/UserRegisterPage.vue'
 import UserManagePage from '@/pages/admin/UserManagePage.vue'
 import DepartmentManagePage from '@/pages/admin/DepartmentManagePage.vue'
 import AnnouncementManagePage from '@/pages/admin/AnnouncementManagePage.vue'
+import AnnouncementReadRatePage from '@/pages/admin/AnnouncementReadRatePage.vue'
 import AttendanceManagePage from '@/pages/admin/AttendanceManagePage.vue'
+import AttendanceRatePage from '@/pages/admin/AttendanceRatePage.vue'
 import ScheduleManagePage from '@/pages/schedule/ScheduleManagePage.vue'
 import MyScheduleCalendarPage from '@/pages/schedule/MyScheduleCalendarPage.vue'
 import MyScheduleDayPage from '@/pages/schedule/MyScheduleDayPage.vue'
@@ -95,9 +97,21 @@ const router = createRouter({
           meta: { requiresAuth: true, roles: ['admin'] },
         },
         {
+          path: 'admin/announcementReadRate',
+          name: '公告读取率统计',
+          component: AnnouncementReadRatePage,
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
           path: 'admin/attendanceManage',
           name: '考勤管理',
           component: AttendanceManagePage,
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
+          path: 'admin/attendanceRate',
+          name: '考勤率统计',
+          component: AttendanceRatePage,
           meta: { requiresAuth: true, roles: ['admin'] },
         },
         {

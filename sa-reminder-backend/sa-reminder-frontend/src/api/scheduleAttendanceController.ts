@@ -20,6 +20,24 @@ export async function listAttendancePage(
   )
 }
 
+/** 此处后端没有提供注释 POST /schedule/attendance/admin/stat/rate/page */
+export async function listAttendanceRatePage(
+  body: API.ScheduleAttendanceQueryRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponsePageScheduleAttendanceRateVO>(
+    '/schedule/attendance/admin/stat/rate/page',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      data: body,
+      ...(options || {}),
+    }
+  )
+}
+
 /** 此处后端没有提供注释 POST /schedule/attendance/admin/updateStatus */
 export async function updateAttendanceStatus(
   body: API.ScheduleAttendanceUpdateRequest,

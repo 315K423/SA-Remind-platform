@@ -17,6 +17,24 @@ export async function addAnnouncement(
   })
 }
 
+/** 此处后端没有提供注释 POST /announcement/admin/stat/read-rate/page */
+export async function listReadRatePage(
+  body: API.AnnouncementQueryRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponsePageAnnouncementReadRateVO>(
+    '/announcement/admin/stat/read-rate/page',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      data: body,
+      ...(options || {}),
+    }
+  )
+}
+
 /** 此处后端没有提供注释 POST /announcement/delete */
 export async function deleteAnnouncement(
   body: API.DeleteRequest,
