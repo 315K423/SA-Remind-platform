@@ -19,12 +19,12 @@
 
           <a-form-item v-if="isAdminRole" label="部门">
             <a-select
-                v-model:value="searchParams.departmentId"
-                style="width: 180px"
-                allow-clear
-                :options="departmentOptions"
-                show-search
-                option-filter-prop="label"
+              v-model:value="searchParams.departmentId"
+              style="width: 180px"
+              allow-clear
+              :options="departmentOptions"
+              show-search
+              option-filter-prop="label"
             />
           </a-form-item>
 
@@ -47,8 +47,8 @@
 
             <template v-else-if="column.dataIndex === 'status'">
               <a-badge
-                  :status="(scheduleStatusColorMap[record.status || 'normal'] as any) || 'default'"
-                  :text="scheduleStatusTextMap[record.status || 'normal'] || record.status || '正常'"
+                :status="(scheduleStatusColorMap[record.status || 'normal'] as any) || 'default'"
+                :text="scheduleStatusTextMap[record.status || 'normal'] || record.status || '正常'"
               />
             </template>
 
@@ -77,7 +77,8 @@
 
             <template v-else-if="column.key === 'action'">
               <a-space>
-                <a-button type="link" @click="openEditModal(record)" :disabled="!canEdit(record)">编辑</a-button>
+                <a-button v-if="isExpired(record)" type="link" @click="openViewModal(record)">查看</a-button>
+                <a-button v-else type="link" @click="openEditModal(record)" :disabled="!canEdit(record)">编辑</a-button>
                 <a-popconfirm title="确认删除该日程吗？" @confirm="doDelete(record.id)">
                   <a-button type="link" danger :disabled="!canEdit(record)">删除</a-button>
                 </a-popconfirm>
@@ -101,8 +102,8 @@
             <a-form-item label="日程类型">
               <a-select v-model:value="formState.scheduleType" @change="handleScheduleTypeChange">
                 <a-select-option value="personal">个人日程</a-select-option>
-                <a-select-option value="meeting">会议安排</a-select-option>
-                <a-select-option value="attendance">考勤事项</a-select-option>
+                <a-select-option value="meeting" v-if="isAdminRole || isManagerRole">会议安排</a-select-option>
+                <a-select-option value="attendance" v-if="isAdminRole || isManagerRole">考勤事项</a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -110,12 +111,12 @@
           <a-col :span="12">
             <a-form-item label="开始时间" required>
               <a-date-picker
-                  v-model:value="formState.startTime"
-                  :show-time="{ format : 'HH:mm' }"
-                  value-format="YYYY-MM-DDTHH:mm"
-                  format="YYYY-MM-DD HH:mm"
-                  style="width: 100%"
-                  placeholder="请选择开始时间"
+                v-model:value="formState.startTime"
+                :show-time="{ format : 'HH:mm' }"
+                value-format="YYYY-MM-DDTHH:mm"
+                format="YYYY-MM-DD HH:mm"
+                style="width: 100%"
+                placeholder="请选择开始时间"
               />
             </a-form-item>
           </a-col>
@@ -123,12 +124,12 @@
           <a-col :span="12">
             <a-form-item label="结束时间">
               <a-date-picker
-                  v-model:value="formState.endTime"
-                  :show-time="{ format : 'HH:mm' }"
-                  value-format="YYYY-MM-DDTHH:mm"
-                  format="YYYY-MM-DD HH:mm"
-                  style="width: 100%"
-                  placeholder="请选择结束时间"
+                v-model:value="formState.endTime"
+                :show-time="{ format : 'HH:mm' }"
+                value-format="YYYY-MM-DDTHH:mm"
+                format="YYYY-MM-DD HH:mm"
+                style="width: 100%"
+                placeholder="请选择结束时间"
               />
             </a-form-item>
           </a-col>
@@ -160,10 +161,10 @@
           <a-col :span="12">
             <a-form-item label="全天日程">
               <a-switch
-                  :checked="formState.allDay === 1"
-                  checked-children="是"
-                  un-checked-children="否"
-                  @change="(checked: boolean) => (formState.allDay = checked ? 1 : 0)"
+                :checked="formState.allDay === 1"
+                checked-children="是"
+                un-checked-children="否"
+                @change="(checked: boolean) => (formState.allDay = checked ? 1 : 0)"
               />
             </a-form-item>
           </a-col>
@@ -171,13 +172,13 @@
           <a-col :span="24">
             <a-form-item v-if="isAdminRole" label="参与部门">
               <a-select
-                  v-model:value="formState.departmentIdList"
-                  mode="multiple"
-                  :options="departmentOptions"
-                  placeholder="请选择参与部门"
-                  show-search
-                  option-filter-prop="label"
-                  @change="handleDepartmentChange"
+                v-model:value="formState.departmentIdList"
+                mode="multiple"
+                :options="departmentOptions"
+                placeholder="请选择参与部门"
+                show-search
+                option-filter-prop="label"
+                @change="handleDepartmentChange"
               />
             </a-form-item>
 
@@ -186,15 +187,15 @@
             </a-form-item>
           </a-col>
 
-          <a-col :span="24">
+          <a-col :span="24" v-if="isAdminRole || isManagerRole">
             <a-form-item label="参与员工">
               <a-select
-                  v-model:value="formState.participantUserIdList"
-                  mode="multiple"
-                  :options="participantOptions"
-                  placeholder="请选择参与员工"
-                  show-search
-                  option-filter-prop="label"
+                v-model:value="formState.participantUserIdList"
+                mode="multiple"
+                :options="participantOptions"
+                placeholder="请选择参与员工"
+                show-search
+                option-filter-prop="label"
               />
             </a-form-item>
           </a-col>
@@ -212,21 +213,21 @@
             <a-col :span="12">
               <a-form-item label="启用定位签到">
                 <a-switch
-                    :checked="formState.checkInEnabled === 1"
-                    checked-children="启用"
-                    un-checked-children="关闭"
-                    @change="(checked: boolean) => (formState.checkInEnabled = checked ? 1 : 0)"
+                  :checked="formState.checkInEnabled === 1"
+                  checked-children="启用"
+                  un-checked-children="关闭"
+                  @change="(checked: boolean) => (formState.checkInEnabled = checked ? 1 : 0)"
                 />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item label="签到半径（米）">
                 <a-input-number
-                    v-model:value="formState.checkInRadiusMeters"
-                    :min="1"
-                    :max="10000"
-                    style="width: 100%"
-                    placeholder="默认 200 米"
+                  v-model:value="formState.checkInRadiusMeters"
+                  :min="1"
+                  :max="10000"
+                  style="width: 100%"
+                  placeholder="默认 200 米"
                 />
               </a-form-item>
             </a-col>
@@ -253,6 +254,30 @@
           </template>
         </a-row>
       </a-form>
+    </a-modal>
+
+    <a-modal :open="viewModalVisible" title="查看日程" :footer="null" @cancel="closeViewModal" width="720px">
+      <a-descriptions v-if="viewRecord" bordered :column="1">
+        <a-descriptions-item label="日程标题">{{ viewRecord.title || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="日程类型">
+          {{ scheduleTypeTextMap[viewRecord.scheduleType || 'personal'] || viewRecord.scheduleType || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="状态">
+          {{ scheduleStatusTextMap[viewRecord.status || 'normal'] || viewRecord.status || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="开始时间">{{ formatDateTime(viewRecord.startTime) }}</a-descriptions-item>
+        <a-descriptions-item label="结束时间">{{ formatDateTime(viewRecord.endTime) }}</a-descriptions-item>
+        <a-descriptions-item label="地点">{{ viewRecord.location || '未设置地点' }}</a-descriptions-item>
+        <a-descriptions-item label="参与部门">{{ getDepartmentNames(viewRecord.departmentIdList) }}</a-descriptions-item>
+        <a-descriptions-item label="参与人数">{{ viewRecord.participantUserIdList?.length || 0 }} 人</a-descriptions-item>
+        <a-descriptions-item label="内容说明">{{ viewRecord.content || '暂无内容' }}</a-descriptions-item>
+        <a-descriptions-item v-if="viewRecord.scheduleType === 'attendance'" label="签到配置">
+          <div>是否启用：{{ viewRecord.checkInEnabled === 1 ? '已启用' : '未启用' }}</div>
+          <div>签到地点：{{ viewRecord.checkInAddress || '-' }}</div>
+          <div>签到半径：{{ viewRecord.checkInRadiusMeters || 200 }} 米</div>
+          <div>坐标：{{ viewRecord.checkInLatitude ?? '-' }}，{{ viewRecord.checkInLongitude ?? '-' }}</div>
+        </a-descriptions-item>
+      </a-descriptions>
     </a-modal>
 
     <a-modal :open="conflictModalVisible" title="检测到日程冲突" :footer="null" @cancel="conflictModalVisible = false">
@@ -364,9 +389,11 @@ const pageDesc = computed(() => {
 const data = ref<API.ScheduleEventVO[]>([])
 const total = ref(0)
 const modalVisible = ref(false)
+const viewModalVisible = ref(false)
 const conflictModalVisible = ref(false)
 const isEdit = ref(false)
 const conflictList = ref<API.ScheduleConflictVO[]>([])
+const viewRecord = ref<API.ScheduleEventVO>()
 
 const departmentMap = ref<Record<string, string>>({})
 const participantOptions = ref<{ label: string; value: number }[]>([])
@@ -402,10 +429,10 @@ const formState = reactive<ScheduleFormState>({
 })
 
 const departmentOptions = computed(() =>
-    Object.entries(departmentMap.value).map(([value, label]) => ({
-      label,
-      value,
-    })),
+  Object.entries(departmentMap.value).map(([value, label]) => ({
+    label,
+    value,
+  })),
 )
 
 const pagination = computed(() => ({
@@ -443,9 +470,9 @@ const resetForm = () => {
     status: 'normal',
     participantUserIdList: [],
     departmentIdList:
-        isManagerRole.value && loginUserStore.loginUser.departmentId
-            ? [String(loginUserStore.loginUser.departmentId)]
-            : [],
+      isManagerRole.value && loginUserStore.loginUser.departmentId
+        ? [String(loginUserStore.loginUser.departmentId)]
+        : [],
     checkInEnabled: 0,
     checkInAddress: '',
     checkInLatitude: undefined,
@@ -476,10 +503,10 @@ const fetchDepartments = async () => {
 
 const loadParticipantOptions = async (departmentIds?: string[]) => {
   const ids = departmentIds?.length
-      ? departmentIds
-      : isManagerRole.value && loginUserStore.loginUser.departmentId
-          ? [String(loginUserStore.loginUser.departmentId)]
-          : []
+    ? departmentIds
+    : isManagerRole.value && loginUserStore.loginUser.departmentId
+      ? [String(loginUserStore.loginUser.departmentId)]
+      : []
 
   if (ids.length === 0 && !isAdminRole.value) {
     participantOptions.value = []
@@ -624,22 +651,22 @@ const fillCurrentLocation = async () => {
     return
   }
   navigator.geolocation.getCurrentPosition(
-      (position) => {
-        formState.checkInLatitude = position.coords.latitude
-        formState.checkInLongitude = position.coords.longitude
-        if (!formState.checkInAddress) {
-          formState.checkInAddress = '浏览器当前定位点'
-        }
-        message.success('已填充当前位置坐标')
-      },
-      (error) => {
-        message.error(error.message || '定位失败')
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      },
+    (position) => {
+      formState.checkInLatitude = position.coords.latitude
+      formState.checkInLongitude = position.coords.longitude
+      if (!formState.checkInAddress) {
+        formState.checkInAddress = '浏览器当前定位点'
+      }
+      message.success('已填充当前位置坐标')
+    },
+    (error) => {
+      message.error(error.message || '定位失败')
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    },
   )
 }
 
@@ -649,9 +676,9 @@ const buildSubmitParams = () => {
     startTime: formState.startTime ? dayjs(formState.startTime).format('YYYY-MM-DDTHH:mm') : undefined,
     endTime: formState.endTime ? dayjs(formState.endTime).format('YYYY-MM-DDTHH:mm') : undefined,
     departmentIdList:
-        isManagerRole.value && loginUserStore.loginUser.departmentId
-            ? [String(loginUserStore.loginUser.departmentId)]
-            : formState.departmentIdList,
+      isManagerRole.value && loginUserStore.loginUser.departmentId
+        ? [String(loginUserStore.loginUser.departmentId)]
+        : formState.departmentIdList,
   }
 
   if (payload.scheduleType !== 'attendance') {
@@ -677,9 +704,9 @@ const submitForm = async () => {
   }
 
   if (
-      formState.scheduleType === 'attendance' &&
-      formState.checkInEnabled === 1 &&
-      (!formState.checkInLatitude || !formState.checkInLongitude)
+    formState.scheduleType === 'attendance' &&
+    formState.checkInEnabled === 1 &&
+    (!formState.checkInLatitude || !formState.checkInLongitude)
   ) {
     message.warning('考勤事项启用定位签到时，请填写签到经纬度')
     return
@@ -710,6 +737,21 @@ const closeModal = () => {
 }
 
 const canEdit = (record: API.ScheduleEventVO) => canEditSchedule(loginUserStore.loginUser, record)
+
+const isExpired = (record: API.ScheduleEventVO) => {
+  if (!record.endTime) return false
+  return dayjs(record.endTime).isBefore(dayjs())
+}
+
+const openViewModal = (record: API.ScheduleEventVO) => {
+  viewRecord.value = record
+  viewModalVisible.value = true
+}
+
+const closeViewModal = () => {
+  viewModalVisible.value = false
+  viewRecord.value = undefined
+}
 
 const doDelete = async (id?: number) => {
   if (!id) return

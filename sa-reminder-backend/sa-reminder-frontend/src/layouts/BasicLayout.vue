@@ -3,11 +3,11 @@
     <a-layout-sider :collapsed="collapsed" collapsible width="248" class="sider">
       <div class="brand">SA Reminder</div>
       <a-menu
-          theme="dark"
-          mode="inline"
-          :selectedKeys="selectedKeys"
-          :items="menuItems"
-          @click="onMenuClick"
+        theme="dark"
+        mode="inline"
+        :selectedKeys="selectedKeys"
+        :items="menuItems"
+        @click="onMenuClick"
       />
     </a-layout-sider>
     <a-layout>
@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import {
   HomeOutlined,
   CalendarOutlined,
@@ -36,13 +36,14 @@ import {
   ApartmentOutlined,
   AuditOutlined,
 } from '@ant-design/icons-vue'
-import type { MenuProps } from 'ant-design-vue'
+import { Modal, type MenuProps } from 'ant-design-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useLoginUserStore } from '@/stores/loginUser'
 import GlobalHeader from '@/components/GlobalHeader.vue'
 import GlobalFooter from '@/components/GlobalFooter.vue'
 import GlobalReminderPopup from '@/components/GlobalReminderPopup.vue'
 import { isAdmin } from '@/utils/app'
+import { myList } from '@/api/announcementController'
 
 const router = useRouter()
 const route = useRoute()
@@ -51,11 +52,11 @@ const collapsed = ref(false)
 const selectedKeys = ref<string[]>([route.path])
 
 watch(
-    () => route.path,
-    (newPath) => {
-      selectedKeys.value = [newPath]
-    },
-    { immediate: true },
+  () => route.path,
+  (newPath) => {
+    selectedKeys.value = [newPath]
+  },
+  { immediate: true },
 )
 
 const commonItems: MenuProps['items'] = [
@@ -104,6 +105,31 @@ const menuItems = computed(() => {
 const onMenuClick: MenuProps['onClick'] = ({ key }) => {
   router.push(String(key))
 }
+
+const isUnreadAnnouncement = (item: API.AnnouncementVO) => {
+  const status = (item.receiveStatus || '').toLowerCase()
+  return status !== 'read'
+}
+
+const checkUnreadAnnouncements = async () => {
+  if (!loginUserStore.loginUser.id) return
+
+  const res = await myList()
+  if (res.data.code !== 0) return
+
+  const unreadCount = (res.data.data || []).filter(isUnreadAnnouncement).length
+  if (unreadCount <= 0) return
+
+  Modal.confirm({
+    title: '公告未读提醒',
+    content: `你有 ${unreadCount} 条未读公告，请及时查看。`,
+    okText: '去查看',
+    cancelText: '稍后',
+    onOk: () => router.push('/announcement/list'),
+  })
+}
+
+onMounted(checkUnreadAnnouncements)
 </script>
 
 <style scoped>
