@@ -12,6 +12,7 @@ import com.workspace.sareminderbackend.model.dto.schedule.ScheduleAttendanceQuer
 import com.workspace.sareminderbackend.model.dto.schedule.ScheduleAttendanceUpdateRequest;
 import com.workspace.sareminderbackend.model.entity.User;
 import com.workspace.sareminderbackend.model.vo.ScheduleAttendanceCheckInVO;
+import com.workspace.sareminderbackend.model.vo.ScheduleAttendanceRateVO;
 import com.workspace.sareminderbackend.model.vo.ScheduleAttendanceVO;
 import com.workspace.sareminderbackend.service.ScheduleAttendanceService;
 import com.workspace.sareminderbackend.service.UserService;
@@ -50,5 +51,16 @@ public class ScheduleAttendanceController {
     public BaseResponse<Boolean> updateAttendanceStatus(@RequestBody ScheduleAttendanceUpdateRequest request) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
         return ResultUtils.success(scheduleAttendanceService.adminUpdateAttendanceStatus(request));
+    }
+
+    /**
+     * 分页查询考勤率统计。
+     * 用于后台“考勤管理 / 考勤率统计”子菜单。
+     */
+    @PostMapping("/admin/stat/rate/page")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Page<ScheduleAttendanceRateVO>> listAttendanceRatePage(@RequestBody ScheduleAttendanceQueryRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        return ResultUtils.success(scheduleAttendanceService.listAttendanceRatePage(request));
     }
 }

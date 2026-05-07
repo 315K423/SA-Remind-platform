@@ -13,6 +13,7 @@ import com.workspace.sareminderbackend.model.dto.announcement.AnnouncementQueryR
 import com.workspace.sareminderbackend.model.dto.announcement.AnnouncementUpdateRequest;
 import com.workspace.sareminderbackend.model.entity.User;
 import com.workspace.sareminderbackend.model.entity.announcement.Announcement;
+import com.workspace.sareminderbackend.model.vo.AnnouncementReadRateVO;
 import com.workspace.sareminderbackend.model.vo.AnnouncementVO;
 import com.workspace.sareminderbackend.service.AnnouncementService;
 import com.workspace.sareminderbackend.service.UserService;
@@ -91,6 +92,17 @@ public class AnnouncementController {
         Page<AnnouncementVO> voPage = new Page<>(pageNum, pageSize, page.getTotalRow());
         voPage.setRecords(announcementService.getAnnouncementVOList(page.getRecords(), loginUser));
         return ResultUtils.success(voPage);
+    }
+
+    /**
+     * 分页查询公告读取率统计。
+     * 用于后台“公告管理 / 读取率统计”子菜单。
+     */
+    @PostMapping("/admin/stat/read-rate/page")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Page<AnnouncementReadRateVO>> listReadRatePage(@RequestBody AnnouncementQueryRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        return ResultUtils.success(announcementService.listReadRatePage(request));
     }
 
     /**

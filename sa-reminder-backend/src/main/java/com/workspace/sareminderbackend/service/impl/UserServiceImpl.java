@@ -18,10 +18,16 @@ import com.workspace.sareminderbackend.model.vo.UserVO;
 import com.workspace.sareminderbackend.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -195,6 +201,58 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public boolean isManager(User user) {
         return UserRoleEnum.MANAGER.equals(UserRoleEnum.getEnumByValue(user.getUserRole()));
+    }
+
+    @Override
+    public void exportUserExcel(UserQueryRequest userQueryRequest, HttpServletResponse response) {
+        UserQueryRequest finalRequest = userQueryRequest == null ? new UserQueryRequest() : userQueryRequest;
+        List<UserVO> userVOList = getUserVOList(this.list(getQueryWrapper(finalRequest)));
+
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("用户数据");
+
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+
+            String[] headers = {"用户ID", "账号", "用户名", "角色", "部门", "个人简介", "创建时间"};
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            for (int i = 0; i < userVOList.size(); i++) {
+                UserVO userVO = userVOList.get(i);
+                Row row = sheet.createRow(i + 1);
+                row.createCell(0).setCellValue(userVO.getId() == null ? "" : String.valueOf(userVO.getId()));
+                row.createCell(1).setCellValue(blankToDash(userVO.getUserAccount()));
+                row.createCell(2).setCellValue(blankToDash(userVO.getUserName()));
+                row.createCell(3).setCellValue(blankToDash(userVO.getUserRole()));
+                row.createCell(4).setCellValue(blankToDash(userVO.getDepartmentName()));
+                row.createCell(5).setCellValue(blankToDash(userVO.getUserProfile()));
+                row.createCell(6).setCellValue(userVO.getCreateTime() == null ? "" : userVO.getCreateTime().toString().replace("T", " "));
+            }
+
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            String fileName = URLEncoder.encode("用户数据_" + LocalDate.now() + ".xlsx", StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            response.setCharacterEncoding("UTF-8");
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + fileName);
+            workbook.write(response.getOutputStream());
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "用户 Excel 导出失败");
+        }
+    }
+
+    private String blankToDash(String value) {
+        return StrUtil.isBlank(value) ? "-" : value;
     }
 
     private void fillDepartmentInfo(Long departmentId, Object target) {

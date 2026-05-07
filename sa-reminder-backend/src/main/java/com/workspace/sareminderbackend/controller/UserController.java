@@ -22,6 +22,7 @@ import com.workspace.sareminderbackend.service.DepartmentService;
 import com.workspace.sareminderbackend.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -209,6 +210,16 @@ public class UserController {
         List<UserVO> userVOList = userService.getUserVOList(userPage.getRecords());
         userVOPage.setRecords(userVOList);
         return ResultUtils.success(userVOPage);
+    }
+
+    /**
+     * 导出用户 Excel。
+     * 注意：导出接口不返回 BaseResponse，而是直接输出 xlsx 文件流。
+     */
+    @GetMapping("/admin/export")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public void exportUserExcel(UserQueryRequest userQueryRequest, HttpServletResponse response) {
+        userService.exportUserExcel(userQueryRequest, response);
     }
     private String getFileSuffix(String originalFilename) {
         if (StrUtil.isBlank(originalFilename) || !originalFilename.contains(".")) {

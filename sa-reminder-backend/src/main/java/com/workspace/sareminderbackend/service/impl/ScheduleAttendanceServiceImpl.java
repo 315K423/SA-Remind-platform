@@ -17,6 +17,7 @@ import com.workspace.sareminderbackend.model.entity.schedule.ScheduleEvent;
 import com.workspace.sareminderbackend.model.entity.schedule.ScheduleParticipant;
 import com.workspace.sareminderbackend.model.entity.schedule.ScheduleReminderTask;
 import com.workspace.sareminderbackend.model.vo.ScheduleAttendanceCheckInVO;
+import com.workspace.sareminderbackend.model.vo.ScheduleAttendanceRateVO;
 import com.workspace.sareminderbackend.model.vo.ScheduleAttendanceVO;
 import com.workspace.sareminderbackend.service.ScheduleAttendanceService;
 import com.workspace.sareminderbackend.service.ScheduleReminderTaskService;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -230,6 +232,76 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
 
         update.setUpdateTime(LocalDateTime.now());
         return scheduleParticipantMapper.update(update) > 0;
+    }
+
+    @Override
+    public Page<ScheduleAttendanceRateVO> listAttendanceRatePage(ScheduleAttendanceQueryRequest request) {
+        ScheduleAttendanceQueryRequest finalRequest =
+                request == null ? new ScheduleAttendanceQueryRequest() : request;
+
+        List<ScheduleEvent> eventList = scheduleEventMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .eq("scheduleType", "attendance")
+                        .eq("isDelete", 0)
+        );
+
+        List<ScheduleAttendanceRateVO> allList = Optional.ofNullable(eventList)
+                .orElse(new ArrayList<>())
+                .stream()
+                .filter(item -> finalRequest.getScheduleId() == null || Objects.equals(item.getId(), finalRequest.getScheduleId()))
+                .filter(item -> StrUtil.isBlank(finalRequest.getScheduleTitle()) || StrUtil.containsIgnoreCase(item.getTitle(), finalRequest.getScheduleTitle()))
+                .sorted(Comparator.comparing(
+                        ScheduleEvent::getStartTime,
+                        Comparator.nullsLast(LocalDateTime::compareTo)
+                ).reversed())
+                .map(this::buildAttendanceRateVO)
+                .collect(Collectors.toList());
+
+        long total = allList.size();
+        int pageNum = finalRequest.getPageNum() <= 0 ? 1 : finalRequest.getPageNum();
+        int pageSize = finalRequest.getPageSize() <= 0 ? 10 : finalRequest.getPageSize();
+        int fromIndex = Math.max((pageNum - 1) * pageSize, 0);
+        int toIndex = Math.min(fromIndex + pageSize, allList.size());
+        List<ScheduleAttendanceRateVO> pageRecords =
+                fromIndex >= allList.size() ? new ArrayList<>() : allList.subList(fromIndex, toIndex);
+
+        Page<ScheduleAttendanceRateVO> page = new Page<>(pageNum, pageSize, total);
+        page.setRecords(pageRecords);
+        return page;
+    }
+
+    private ScheduleAttendanceRateVO buildAttendanceRateVO(ScheduleEvent scheduleEvent) {
+        List<ScheduleParticipant> participantList = scheduleParticipantMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .eq("scheduleId", scheduleEvent.getId())
+                        .eq("isDelete", 0)
+        );
+
+        int participantCount = CollUtil.isEmpty(participantList) ? 0 : participantList.size();
+        int checkedCount = CollUtil.isEmpty(participantList) ? 0 : (int) participantList.stream()
+                .filter(item -> ATTENDANCE_CHECKED_IN.equalsIgnoreCase(item.getAttendanceStatus()))
+                .count();
+        int uncheckedCount = Math.max(participantCount - checkedCount, 0);
+
+        ScheduleAttendanceRateVO vo = new ScheduleAttendanceRateVO();
+        vo.setScheduleId(scheduleEvent.getId());
+        vo.setScheduleTitle(scheduleEvent.getTitle());
+        vo.setScheduleStartTime(scheduleEvent.getStartTime());
+        vo.setScheduleEndTime(scheduleEvent.getEndTime());
+        vo.setParticipantCount(participantCount);
+        vo.setCheckedCount(checkedCount);
+        vo.setUncheckedCount(uncheckedCount);
+        vo.setAttendanceRate(calculateRate(checkedCount, participantCount));
+        vo.setCheckInAddress(scheduleEvent.getCheckInAddress());
+        vo.setCheckInRadiusMeters(scheduleEvent.getCheckInRadiusMeters());
+        return vo;
+    }
+
+    private Double calculateRate(int numerator, int denominator) {
+        if (denominator <= 0) {
+            return 0D;
+        }
+        return Math.round(numerator * 10000D / denominator) / 100D;
     }
 
     private boolean isAttendanceCheckRequired(ScheduleEvent scheduleEvent) {

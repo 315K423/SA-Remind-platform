@@ -7,6 +7,7 @@ import com.workspace.sareminderbackend.model.entity.User;
 import com.workspace.sareminderbackend.model.vo.LoginUserVO;
 import com.workspace.sareminderbackend.model.vo.UserVO;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.List;
 
@@ -37,4 +38,12 @@ public interface UserService extends IService<User> {
     boolean isAdmin(User user);
 
     boolean isManager(User user);
+
+    /**
+     * 导出用户 Excel。
+     *
+     * @param userQueryRequest 查询条件，和用户管理列表保持一致
+     * @param response         HTTP 响应，用于输出 xlsx 文件流
+     */
+    void exportUserExcel(UserQueryRequest userQueryRequest, HttpServletResponse response);
 }

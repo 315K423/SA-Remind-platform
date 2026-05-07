@@ -3,6 +3,7 @@ package com.workspace.sareminderbackend.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.workspace.sareminderbackend.exception.BusinessException;
@@ -17,6 +18,7 @@ import com.workspace.sareminderbackend.model.entity.User;
 import com.workspace.sareminderbackend.model.entity.announcement.Announcement;
 import com.workspace.sareminderbackend.model.entity.announcement.AnnouncementDepartment;
 import com.workspace.sareminderbackend.model.entity.announcement.AnnouncementReceiver;
+import com.workspace.sareminderbackend.model.vo.AnnouncementReadRateVO;
 import com.workspace.sareminderbackend.model.vo.AnnouncementVO;
 import com.workspace.sareminderbackend.service.AnnouncementService;
 import com.workspace.sareminderbackend.service.DepartmentService;
@@ -291,6 +293,82 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         update.setUpdateTime(now);
         update.setIsDelete(0);
         return announcementReceiverMapper.update(update) > 0;
+    }
+
+    @Override
+    public Page<AnnouncementReadRateVO> listReadRatePage(AnnouncementQueryRequest request) {
+        AnnouncementQueryRequest finalRequest = request == null ? new AnnouncementQueryRequest() : request;
+        long pageNum = finalRequest.getPageNum() <= 0 ? 1 : finalRequest.getPageNum();
+        long pageSize = finalRequest.getPageSize() <= 0 ? 10 : finalRequest.getPageSize();
+
+        Page<Announcement> announcementPage = this.page(Page.of(pageNum, pageSize), getQueryWrapper(finalRequest));
+        Page<AnnouncementReadRateVO> voPage = new Page<>(pageNum, pageSize, announcementPage.getTotalRow());
+
+        List<User> userList = userService.list(QueryWrapper.create().eq("isDelete", 0));
+        List<AnnouncementReadRateVO> voList = announcementPage.getRecords().stream()
+                .map(announcement -> buildReadRateVO(announcement, userList))
+                .collect(Collectors.toList());
+        voPage.setRecords(voList);
+        return voPage;
+    }
+
+    private AnnouncementReadRateVO buildReadRateVO(Announcement announcement, List<User> userList) {
+        List<User> receiverUserList = Optional.ofNullable(userList)
+                .orElse(Collections.emptyList())
+                .stream()
+                .filter(user -> canUserAccessAnnouncement(announcement, user))
+                .collect(Collectors.toList());
+
+        Set<Long> receiverUserIdSet = receiverUserList.stream()
+                .map(User::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Set<Long> readUserIdSet = new HashSet<>();
+        if (!receiverUserIdSet.isEmpty()) {
+            List<AnnouncementReceiver> readReceiverList = announcementReceiverMapper.selectListByQuery(
+                    QueryWrapper.create()
+                            .eq("announcementId", announcement.getId())
+                            .eq("receiveStatus", RECEIVE_READ)
+                            .eq("isDelete", 0)
+                            .in("userId", receiverUserIdSet)
+            );
+            readUserIdSet = readReceiverList.stream()
+                    .map(AnnouncementReceiver::getUserId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+        }
+
+        int receiverCount = receiverUserIdSet.size();
+        int readCount = readUserIdSet.size();
+        int unreadCount = Math.max(receiverCount - readCount, 0);
+
+        AnnouncementReadRateVO vo = new AnnouncementReadRateVO();
+        vo.setAnnouncementId(announcement.getId());
+        vo.setTitle(announcement.getTitle());
+        vo.setScopeType(announcement.getScopeType());
+        vo.setStatus(announcement.getStatus());
+        vo.setPublisherId(announcement.getPublisherId());
+        vo.setPublishTime(announcement.getPublishTime());
+        vo.setReceiverCount(receiverCount);
+        vo.setReadCount(readCount);
+        vo.setUnreadCount(unreadCount);
+        vo.setReadRate(calculateRate(readCount, receiverCount));
+
+        if (announcement.getPublisherId() != null) {
+            User publisher = userService.getById(announcement.getPublisherId());
+            if (publisher != null) {
+                vo.setPublisherName(publisher.getUserName());
+            }
+        }
+        return vo;
+    }
+
+    private Double calculateRate(int numerator, int denominator) {
+        if (denominator <= 0) {
+            return 0D;
+        }
+        return Math.round(numerator * 10000D / denominator) / 100D;
     }
 
     /**
