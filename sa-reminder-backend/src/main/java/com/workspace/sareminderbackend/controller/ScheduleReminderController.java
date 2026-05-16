@@ -47,6 +47,13 @@ public class ScheduleReminderController {
         return ResultUtils.success(id);
     }
 
+    /**
+     *  根据日程ID获取提醒规则
+     *
+     * @param scheduleId
+     * @param httpServletRequest
+     * @return
+     */
     @GetMapping("/rule/get")
     @AuthCheck
     public BaseResponse<ScheduleReminderRuleVO> getRuleByScheduleId(long scheduleId,
@@ -73,6 +80,13 @@ public class ScheduleReminderController {
         return ResultUtils.success(result);
     }
 
+    /**
+     *  分页查询列表
+     *
+     * @param queryRequest
+     * @param httpServletRequest
+     * @return
+     */
     @PostMapping("/rule/list/page/vo")
     @AuthCheck
     public BaseResponse<Page<ScheduleReminderRuleVO>> listRuleByPage(@RequestBody ScheduleReminderRuleQueryRequest queryRequest,
@@ -90,6 +104,12 @@ public class ScheduleReminderController {
         return ResultUtils.success(voPage);
     }
 
+    /**
+     *  获取当前用户未读的提醒任务列表
+     *
+     * @param httpServletRequest
+     * @return
+     */
     @GetMapping("/popup/list")
     @AuthCheck
     public BaseResponse<List<ScheduleReminderPopupVO>> listPopupTasks(HttpServletRequest httpServletRequest) {
@@ -97,6 +117,13 @@ public class ScheduleReminderController {
         return ResultUtils.success(scheduleReminderTaskService.listPopupTasks(loginUser));
     }
 
+    /**
+     *  读取单条弹窗任务
+     *
+     * @param deleteRequest
+     * @param httpServletRequest
+     * @return
+     */
     @PostMapping("/popup/read")
     @AuthCheck
     public BaseResponse<Boolean> readPopup(@RequestBody DeleteRequest deleteRequest,
@@ -107,6 +134,13 @@ public class ScheduleReminderController {
         return ResultUtils.success(scheduleReminderTaskService.readPopupTask(deleteRequest.getId(), loginUser));
     }
 
+    /**
+     *  读取所有弹窗任务
+     *
+     * @param request
+     * @param httpServletRequest
+     * @return
+     */
     @PostMapping("/popup/read/all")
     @AuthCheck
     public BaseResponse<Boolean> readAllPopup(@RequestBody(required = false) ScheduleReminderPopupReadAllRequest request,

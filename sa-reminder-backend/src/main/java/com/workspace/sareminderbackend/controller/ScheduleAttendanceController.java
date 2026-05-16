@@ -30,15 +30,29 @@ public class ScheduleAttendanceController {
     @Resource
     private UserService userService;
 
+    /**
+     *  签到检查接口
+     *
+     * @param request
+     * @param httpServletRequest
+     * @return
+     */
     @PostMapping("/checkIn")
     @AuthCheck
     public BaseResponse<ScheduleAttendanceCheckInVO> checkIn(@RequestBody ScheduleAttendanceCheckInRequest request,
                                                              HttpServletRequest httpServletRequest) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser(httpServletRequest);
+        // 调用签到检查逻辑
         return ResultUtils.success(scheduleAttendanceService.checkInByTask(request, loginUser));
     }
 
+    /**
+     *  管理员分页查询考勤记录
+     *
+     * @param request
+     * @return
+     */
     @PostMapping("/admin/list/page/vo")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<ScheduleAttendanceVO>> listAttendancePage(@RequestBody ScheduleAttendanceQueryRequest request) {

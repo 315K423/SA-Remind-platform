@@ -24,15 +24,20 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * ScheduleReminderTaskServiceImpl
+ * 实现提醒任务相关业务逻辑
+ * 包括弹窗任务列表、阅读任务、批量标记等
+ */
 @Service
 public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminderTaskMapper, ScheduleReminderTask>
         implements ScheduleReminderTaskService {
 
-    public static final String TASK_SENT = "sent";
-    public static final String TASK_READ = "read";
-    public static final String TASK_EXPIRED = "expired";
+    public static final String TASK_SENT = "sent";       // 已发送
+    public static final String TASK_READ = "read";       // 已阅读
+    public static final String TASK_EXPIRED = "expired"; // 已过期
 
-    public static final String ATTENDANCE_CHECKED_IN = "checked_in";
+    public static final String ATTENDANCE_CHECKED_IN = "checked_in"; // 已签到
 
     @Resource
     private ScheduleParticipantMapper scheduleParticipantMapper;
@@ -40,23 +45,32 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
     @Resource
     private ScheduleEventMapper scheduleEventMapper;
 
+    /**
+     * 获取当前用户的弹窗提醒任务列表
+     */
     @Override
     public List<ScheduleReminderPopupVO> listPopupTasks(User loginUser) {
         if (loginUser == null || loginUser.getId() == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
+
+        // 构建查询条件：已发送且未删除
         QueryWrapper wrapper = QueryWrapper.create()
                 .eq("userId", loginUser.getId())
                 .eq("taskStatus", TASK_SENT)
                 .eq("isDelete", 0)
                 .orderBy("plannedRemindTime", true);
+
         List<ScheduleReminderTask> taskList = this.list(wrapper);
         if (CollUtil.isEmpty(taskList)) {
             return new ArrayList<>();
         }
+
+        // 转换为VO
         return taskList.stream().map(task -> {
             ScheduleReminderPopupVO vo = new ScheduleReminderPopupVO();
             BeanUtil.copyProperties(task, vo);
+
             ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(task.getScheduleId());
             if (scheduleEvent != null) {
                 vo.setScheduleType(scheduleEvent.getScheduleType());
@@ -71,6 +85,9 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
         }).collect(Collectors.toList());
     }
 
+    /**
+     * 标记单个弹窗任务为已读
+     */
     @Override
     public boolean readPopupTask(long taskId, User loginUser) {
         if (taskId <= 0) {
@@ -79,6 +96,7 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
         if (loginUser == null || loginUser.getId() == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
+
         ScheduleReminderTask task = this.getById(taskId);
         if (task == null || (task.getIsDelete() != null && task.getIsDelete() == 1)) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -109,6 +127,7 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
         update.setUpdateTime(now);
         boolean ok = this.mapper.update(update) > 0;
 
+        // 将同规则下的其他任务标记为已过期
         List<ScheduleReminderTask> sameRuleTasks = this.list(QueryWrapper.create()
                 .eq("ruleId", task.getRuleId())
                 .eq("isDelete", 0));
@@ -126,8 +145,11 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
             this.mapper.update(expireUpdate);
         }
 
+        // 更新参与者状态
         ScheduleParticipant participant = scheduleParticipantMapper.selectOneByQuery(QueryWrapper.create()
-                .eq("scheduleId", task.getScheduleId()).eq("userId", loginUser.getId()).eq("isDelete", 0));
+                .eq("scheduleId", task.getScheduleId())
+                .eq("userId", loginUser.getId())
+                .eq("isDelete", 0));
         if (participant != null) {
             ScheduleParticipant updateParticipant = new ScheduleParticipant();
             updateParticipant.setId(participant.getId());
@@ -138,11 +160,15 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
         return ok;
     }
 
+    /**
+     * 批量标记已读
+     */
     @Override
     public boolean readAllPopupTasks(List<Long> taskIdList, User loginUser) {
         if (loginUser == null || loginUser.getId() == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
+
         QueryWrapper wrapper = QueryWrapper.create()
                 .eq("userId", loginUser.getId())
                 .eq("taskStatus", TASK_SENT)
@@ -150,10 +176,12 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
         if (CollUtil.isNotEmpty(taskIdList)) {
             wrapper.in("id", taskIdList);
         }
+
         List<ScheduleReminderTask> taskList = this.list(wrapper);
         if (CollUtil.isEmpty(taskList)) {
             return true;
         }
+
         for (ScheduleReminderTask task : taskList) {
             ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(task.getScheduleId());
             if (isAttendanceCheckRequired(scheduleEvent)) {
@@ -164,6 +192,9 @@ public class ScheduleReminderTaskServiceImpl extends ServiceImpl<ScheduleReminde
         return true;
     }
 
+    /**
+     * 判断日程是否需要签到考勤
+     */
     private boolean isAttendanceCheckRequired(ScheduleEvent scheduleEvent) {
         return scheduleEvent != null
                 && "attendance".equalsIgnoreCase(scheduleEvent.getScheduleType())

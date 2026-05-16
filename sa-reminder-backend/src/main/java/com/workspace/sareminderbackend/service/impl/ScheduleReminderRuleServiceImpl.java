@@ -31,58 +31,79 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * ScheduleReminderRuleServiceImpl
+ * 实现日程提醒策略相关业务逻辑
+ * 提供增删改查、任务生成、定时分发等功能
+ */
 @Service
 public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminderRuleMapper, ScheduleReminderRule>
         implements ScheduleReminderRuleService {
 
-    public static final String STATUS_ENABLED = "enabled";
-    public static final String STATUS_DISABLED = "disabled";
+    // 常量定义：策略状态
+    public static final String STATUS_ENABLED = "enabled"; // 启用
+    public static final String STATUS_DISABLED = "disabled"; // 禁用
 
-    public static final String TASK_PENDING = "pending";
-    public static final String TASK_SENT = "sent";
-    public static final String TASK_READ = "read";
-    public static final String TASK_EXPIRED = "expired";
-
-    @Resource
-    private ScheduleEventMapper scheduleEventMapper;
-
-    @Resource
-    private ScheduleParticipantMapper scheduleParticipantMapper;
+    // 常量定义：任务状态
+    public static final String TASK_PENDING = "pending"; // 待提醒
+    public static final String TASK_SENT = "sent";       // 已发送
+    public static final String TASK_READ = "read";       // 已阅读
+    public static final String TASK_EXPIRED = "expired"; // 已过期
 
     @Resource
-    private ScheduleReminderTaskMapper scheduleReminderTaskMapper;
+    private ScheduleEventMapper scheduleEventMapper; // 日程数据访问
 
     @Resource
-    private UserService userService;
+    private ScheduleParticipantMapper scheduleParticipantMapper; // 参与者数据访问
 
+    @Resource
+    private ScheduleReminderTaskMapper scheduleReminderTaskMapper; // 提醒任务数据访问
+
+    @Resource
+    private UserService userService; // 用户相关服务
+
+    /**
+     * 新增或更新提醒策略
+     * @param request 保存请求
+     * @param loginUser 当前登录用户
+     * @return 新增或更新的策略ID
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public long saveOrUpdateRule(ScheduleReminderRuleSaveRequest request, User loginUser) {
+        // 参数校验
         if (request == null || request.getScheduleId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
 
-        Integer remindOffsetMinutes = request.getRemindOffsetMinutes();
-        Integer repeatIntervalMinutes = request.getRepeatIntervalMinutes();
+        Integer remindOffsetMinutes = request.getRemindOffsetMinutes(); // 提前提醒时间
+        Integer repeatIntervalMinutes = request.getRepeatIntervalMinutes(); // 重复间隔时间
 
+        // 提醒时间范围校验
         if (remindOffsetMinutes == null || remindOffsetMinutes < 0 || remindOffsetMinutes > 30 * 24 * 60) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "提醒时间范围不合法");
         }
+
+        // 重复间隔校验
         if (repeatIntervalMinutes == null || repeatIntervalMinutes < 1 || repeatIntervalMinutes > 24 * 60) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "重复间隔不合法");
         }
 
+        // 获取日程
         ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(request.getScheduleId());
         if (scheduleEvent == null || (scheduleEvent.getIsDelete() != null && scheduleEvent.getIsDelete() == 1)) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "日程不存在");
         }
 
+        // 权限校验
         checkScheduleAccess(scheduleEvent, loginUser);
 
+        // 判断日程是否已经开始或过期
         if (scheduleEvent.getStartTime() == null || !scheduleEvent.getStartTime().isAfter(LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "已开始或已过期的日程不允许再设置提醒");
         }
 
+        // 查询当前用户是否已经存在该日程的提醒策略
         ScheduleReminderRule exist = this.mapper.selectOneByQuery(
                 QueryWrapper.create()
                         .eq("scheduleId", request.getScheduleId())
@@ -90,8 +111,9 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                         .eq("isDelete", 0)
         );
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(); // 当前时间
 
+        // 新建提醒策略
         if (exist == null) {
             ScheduleReminderRule rule = new ScheduleReminderRule();
             rule.setScheduleId(request.getScheduleId());
@@ -105,15 +127,18 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
             rule.setUpdateTime(now);
             rule.setIsDelete(0);
 
+            // 保存策略
             boolean saved = this.save(rule);
             if (!saved) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "保存提醒策略失败");
             }
 
+            // 重建首个提醒任务
             rebuildFirstTask(rule, scheduleEvent);
             return rule.getId();
         }
 
+        // 更新已有策略
         ScheduleReminderRule update = new ScheduleReminderRule();
         update.setId(exist.getId());
         update.setRemindOffsetMinutes(remindOffsetMinutes);
@@ -128,11 +153,18 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新提醒策略失败");
         }
 
+        // 更新策略后重建首个任务
         ScheduleReminderRule latest = this.getById(exist.getId());
         rebuildFirstTask(latest, scheduleEvent);
         return latest.getId();
     }
 
+    /**
+     * 删除提醒策略
+     * @param id 策略ID
+     * @param loginUser 当前登录用户
+     * @return 删除是否成功
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean deleteRule(long id, User loginUser) {
@@ -140,13 +172,20 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         if (rule == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
+
+        // 非管理员且不是创建者，无权限删除
         if (!userService.isAdmin(loginUser) && !Objects.equals(rule.getUserId(), loginUser.getId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
+
+        // 删除关联的提醒任务
         scheduleReminderTaskMapper.deleteByQuery(QueryWrapper.create().eq("ruleId", id));
         return this.removeById(id);
     }
 
+    /**
+     * 根据请求构建查询条件
+     */
     @Override
     public QueryWrapper getQueryWrapper(ScheduleReminderRuleQueryRequest request, User loginUser) {
         QueryWrapper wrapper = QueryWrapper.create()
@@ -164,13 +203,16 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         return wrapper.orderBy(request.getSortField(), "ascend".equals(request.getSortOrder()));
     }
 
+    /**
+     * 获取VO对象
+     */
     @Override
     public ScheduleReminderRuleVO getScheduleReminderRuleVO(ScheduleReminderRule rule) {
         if (rule == null) {
             return null;
         }
         ScheduleReminderRuleVO vo = new ScheduleReminderRuleVO();
-        BeanUtil.copyProperties(rule, vo);
+        BeanUtil.copyProperties(rule, vo); // 复制属性
         ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(rule.getScheduleId());
         if (scheduleEvent != null) {
             vo.setScheduleTitle(scheduleEvent.getTitle());
@@ -179,6 +221,9 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         return vo;
     }
 
+    /**
+     * 获取VO列表
+     */
     @Override
     public List<ScheduleReminderRuleVO> getScheduleReminderRuleVOList(List<ScheduleReminderRule> list) {
         if (CollUtil.isEmpty(list)) {
@@ -187,11 +232,15 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         return list.stream().map(this::getScheduleReminderRuleVO).collect(Collectors.toList());
     }
 
+    /**
+     * 扫描并触发一次提醒任务
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void scanAndDispatchOnce() {
         LocalDateTime now = LocalDateTime.now();
 
+        // 获取所有启用且弹窗启用的策略
         List<ScheduleReminderRule> ruleList = this.list(
                 QueryWrapper.create()
                         .eq("status", STATUS_ENABLED)
@@ -202,6 +251,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         for (ScheduleReminderRule rule : ruleList) {
             ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(rule.getScheduleId());
 
+            // 若日程不存在或已过期，过期该策略的所有任务
             if (scheduleEvent == null
                     || (scheduleEvent.getIsDelete() != null && scheduleEvent.getIsDelete() == 1)
                     || scheduleEvent.getStartTime() == null
@@ -210,6 +260,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                 continue;
             }
 
+            // 检查参与者是否存在
             ScheduleParticipant participant = scheduleParticipantMapper.selectOneByQuery(
                     QueryWrapper.create()
                             .eq("scheduleId", rule.getScheduleId())
@@ -221,6 +272,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                 continue;
             }
 
+            // 查找最新任务
             ScheduleReminderTask latestTask = findLatestTask(rule.getId());
             if (latestTask == null) {
                 buildFirstTask(rule, scheduleEvent);
@@ -230,6 +282,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                 continue;
             }
 
+            // 若任务为待提醒且到时间，则标记为已发送
             if (TASK_PENDING.equals(latestTask.getTaskStatus())
                     && latestTask.getPlannedRemindTime() != null
                     && !latestTask.getPlannedRemindTime().isAfter(now)) {
@@ -243,6 +296,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
                 latestTask = scheduleReminderTaskMapper.selectOneById(latestTask.getId());
             }
 
+            // 若已发送且未达到重复次数，则生成下一次提醒
             if (TASK_SENT.equals(latestTask.getTaskStatus())) {
                 Integer repeatCount = rule.getRepeatCount() == null ? 0 : rule.getRepeatCount();
                 if (latestTask.getRemindIndex() >= repeatCount) {
@@ -268,15 +322,10 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
     }
 
     /**
-     * 重建首任务：
-     * 1. 先把该规则下现有任务逻辑删除
-     * 2. 再重建首任务
-     *
-     * 关键修复点：
-     * 后续 buildNextTask 不再使用普通 insert，而是 upsert。
-     * 即使数据库里已经存在相同 (ruleId, remindIndex) 的逻辑删除记录，也会被恢复并更新，不会再触发唯一键冲突。
+     * 重建首个任务
      */
     private void rebuildFirstTask(ScheduleReminderRule rule, ScheduleEvent scheduleEvent) {
+        // 删除现有任务
         scheduleReminderTaskMapper.deleteByQuery(
                 QueryWrapper.create().eq("ruleId", rule.getId())
         );
@@ -288,9 +337,13 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         buildFirstTask(rule, scheduleEvent);
     }
 
+    /**
+     * 构建首个任务
+     */
     private void buildFirstTask(ScheduleReminderRule rule, ScheduleEvent scheduleEvent) {
         LocalDateTime plannedTime = scheduleEvent.getStartTime().minusMinutes(rule.getRemindOffsetMinutes());
 
+        // 若计划时间非法则不创建
         if (!plannedTime.isBefore(scheduleEvent.getStartTime())) {
             return;
         }
@@ -302,9 +355,7 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
     }
 
     /**
-     * 关键修复点：
-     * 原来这里直接 insert，会因为逻辑删除记录仍占用唯一键 (ruleId, remindIndex) 而报 DuplicateKeyException。
-     * 现在改为 upsert：有则更新并恢复，无则插入。
+     * 构建下一次提醒任务（支持 upsert）
      */
     private void buildNextTask(ScheduleReminderRule rule, ScheduleEvent scheduleEvent, int remindIndex, LocalDateTime plannedTime) {
         LocalDateTime now = LocalDateTime.now();
@@ -332,6 +383,9 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         }
     }
 
+    /**
+     * 查找规则下最新任务
+     */
     private ScheduleReminderTask findLatestTask(Long ruleId) {
         List<ScheduleReminderTask> list = scheduleReminderTaskMapper.selectListByQuery(
                 QueryWrapper.create()
@@ -345,6 +399,9 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         return list.get(0);
     }
 
+    /**
+     * 将规则下所有未完成任务标记过期
+     */
     private void expireRuleTasks(Long ruleId) {
         List<ScheduleReminderTask> taskList = scheduleReminderTaskMapper.selectListByQuery(
                 QueryWrapper.create()
@@ -364,7 +421,11 @@ public class ScheduleReminderRuleServiceImpl extends ServiceImpl<ScheduleReminde
         }
     }
 
+    /**
+     * 校验用户是否有权限为该日程设置提醒
+     */
     private void checkScheduleAccess(ScheduleEvent scheduleEvent, User loginUser) {
+        // 管理员且创建者可直接操作
         if (userService.isAdmin(loginUser) && Objects.equals(scheduleEvent.getCreatorId(), loginUser.getId())) {
             return;
         }

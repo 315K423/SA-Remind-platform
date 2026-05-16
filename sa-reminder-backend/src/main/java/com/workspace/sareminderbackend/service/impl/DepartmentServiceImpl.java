@@ -8,11 +8,7 @@ import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.workspace.sareminderbackend.exception.BusinessException;
 import com.workspace.sareminderbackend.exception.ErrorCode;
 import com.workspace.sareminderbackend.mapper.DepartmentMapper;
-import com.workspace.sareminderbackend.model.dto.department.DepartmentAddRequest;
-import com.workspace.sareminderbackend.model.dto.department.DepartmentAssignUsersRequest;
-import com.workspace.sareminderbackend.model.dto.department.DepartmentQueryRequest;
-import com.workspace.sareminderbackend.model.dto.department.DepartmentTransferUsersRequest;
-import com.workspace.sareminderbackend.model.dto.department.DepartmentUpdateRequest;
+import com.workspace.sareminderbackend.model.dto.department.*;
 import com.workspace.sareminderbackend.model.entity.Department;
 import com.workspace.sareminderbackend.model.entity.User;
 import com.workspace.sareminderbackend.model.enums.UserRoleEnum;
@@ -29,15 +25,23 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * DepartmentServiceImpl
+ * 部门业务实现类，实现 DepartmentService 接口
+ * 包括新增、修改、删除、分页查询、用户分配/转移及 Excel 导入
+ */
 @Service
 public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Department> implements DepartmentService {
 
     @Resource
     private UserService userService;
 
+    /**
+     * 新增部门
+     */
     @Override
     public long addDepartment(DepartmentAddRequest request) {
-        validateDepartmentName(request.getName(), null);
+        validateDepartmentName(request.getName(), null); // 校验部门名唯一性
         Department department = new Department();
         BeanUtil.copyProperties(request, department);
         LocalDateTime now = LocalDateTime.now();
@@ -51,6 +55,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return department.getId();
     }
 
+    /**
+     * 更新部门
+     */
     @Override
     public boolean updateDepartment(DepartmentUpdateRequest request) {
         Department old = getValidDepartment(request.getId());
@@ -61,6 +68,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return this.updateById(update);
     }
 
+    /**
+     * 删除部门
+     */
     @Override
     public boolean deleteDepartment(long id) {
         Department department = getValidDepartment(id);
@@ -71,6 +81,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return this.removeById(department.getId());
     }
 
+    /**
+     * 构建查询条件
+     */
     @Override
     public QueryWrapper getQueryWrapper(DepartmentQueryRequest request) {
         return QueryWrapper.create()
@@ -80,6 +93,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
                 .orderBy(request.getSortField(), "ascend".equals(request.getSortOrder()));
     }
 
+    /**
+     * 构建部门 VO
+     */
     @Override
     public DepartmentVO getDepartmentVO(Department department) {
         if (department == null) {
@@ -87,10 +103,13 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         }
         DepartmentVO vo = new DepartmentVO();
         BeanUtil.copyProperties(department, vo);
-        vo.setUserCount(userService.listByDepartmentId(department.getId()).size());
+        vo.setUserCount(userService.listByDepartmentId(department.getId()).size()); // 统计用户数
         return vo;
     }
 
+    /**
+     * 构建部门 VO 列表
+     */
     @Override
     public List<DepartmentVO> getDepartmentVOList(List<Department> departmentList) {
         if (CollUtil.isEmpty(departmentList)) {
@@ -99,10 +118,14 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return departmentList.stream().map(this::getDepartmentVO).collect(Collectors.toList());
     }
 
+    /**
+     * 分配用户到部门
+     */
     @Override
     public boolean assignUsers(DepartmentAssignUsersRequest request) {
         Department department = getValidDepartment(request.getDepartmentId());
-        List<Long> userIdList = Optional.ofNullable(request.getUserIdList()).orElse(Collections.emptyList())
+        List<Long> userIdList = Optional.ofNullable(request.getUserIdList())
+                .orElse(Collections.emptyList())
                 .stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
         if (userIdList.isEmpty()) {
             return true;
@@ -120,6 +143,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return true;
     }
 
+    /**
+     * 转移用户到其他部门
+     */
     @Override
     public boolean transferUsers(DepartmentTransferUsersRequest request) {
         if (Objects.equals(request.getFromDepartmentId(), request.getToDepartmentId())) {
@@ -127,7 +153,8 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         }
         getValidDepartment(request.getFromDepartmentId());
         Department targetDepartment = getValidDepartment(request.getToDepartmentId());
-        List<Long> userIdList = Optional.ofNullable(request.getUserIdList()).orElse(Collections.emptyList())
+        List<Long> userIdList = Optional.ofNullable(request.getUserIdList())
+                .orElse(Collections.emptyList())
                 .stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
         if (userIdList.isEmpty()) {
             return true;
@@ -148,6 +175,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return true;
     }
 
+    /**
+     * 从 Excel 导入用户到部门
+     */
     @Override
     public List<User> importUsersFromExcel(Long departmentId, String defaultRole, MultipartFile file) {
         getValidDepartment(departmentId);
@@ -171,16 +201,19 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
                 String userRole = StrUtil.blankToDefault(getStringCellValue(row, headIndexMap, "userRole"), defaultRole);
                 String userProfile = getStringCellValue(row, headIndexMap, "userProfile");
                 String userAvatar = getStringCellValue(row, headIndexMap, "userAvatar");
+
                 if (StrUtil.hasBlank(userAccount, userName)) {
                     throw new BusinessException(ErrorCode.PARAMS_ERROR, "第 " + (i + 1) + " 行账号或姓名为空");
                 }
                 if (this.userService.count(QueryWrapper.create().eq("userAccount", userAccount)) > 0) {
                     throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号已存在: " + userAccount);
                 }
+
                 UserRoleEnum roleEnum = UserRoleEnum.getEnumByValue(StrUtil.blankToDefault(userRole, UserRoleEnum.USER.getValue()));
                 if (roleEnum == null || UserRoleEnum.ADMIN.equals(roleEnum)) {
                     throw new BusinessException(ErrorCode.PARAMS_ERROR, "excel 中 userRole 非法，且不允许批量导入 admin");
                 }
+
                 User user = new User();
                 user.setUserAccount(userAccount);
                 user.setUserName(userName);
@@ -203,6 +236,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return savedUsers;
     }
 
+    /**
+     * 验证部门合法性
+     */
     @Override
     public Department getValidDepartment(Long departmentId) {
         if (departmentId == null || departmentId <= 0) {
@@ -215,6 +251,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return department;
     }
 
+    /**
+     * 校验部门名称是否重复
+     */
     private void validateDepartmentName(String name, Long excludeId) {
         if (StrUtil.isBlank(name)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "部门名称不能为空");
@@ -228,6 +267,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         }
     }
 
+    /**
+     * 解析 Excel 表头到列索引 map
+     */
     private Map<String, Integer> parseHeadIndexMap(Row headRow) {
         Map<String, Integer> map = new HashMap<>();
         for (Cell cell : headRow) {
@@ -236,6 +278,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return map;
     }
 
+    /**
+     * 判断 Excel 行是否为空
+     */
     private boolean isBlankRow(Row row) {
         for (Cell cell : row) {
             if (cell != null && StrUtil.isNotBlank(cell.toString())) {
@@ -245,6 +290,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         return true;
     }
 
+    /**
+     * 获取 Excel 单元格字符串值
+     */
     private String getStringCellValue(Row row, Map<String, Integer> headIndexMap, String columnName) {
         Integer index = headIndexMap.get(columnName);
         if (index == null) {

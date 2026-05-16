@@ -70,6 +70,14 @@ public class UserController {
         return ResultUtils.success(userService.userLogout(request));
     }
 
+    /**
+     * 上传头像接口
+     *
+     * @param file
+     * @param userAccount
+     * @param request
+     * @return
+     */
     @PostMapping("/avatar/upload")
     @AuthCheck
     public BaseResponse<String> uploadAvatar(@RequestParam("file") MultipartFile file,
@@ -78,6 +86,9 @@ public class UserController {
         ThrowUtils.throwIf(file == null || file.isEmpty(), ErrorCode.PARAMS_ERROR, "头像文件不能为空");
 
         User loginUser = userService.getLoginUser(request);
+
+        // 将账号中不允许的字符替换为下划线，生成安全文件名前缀
+        // 允许字符：英文字母、数字、下划线、短横线、汉字
         String accountForName = StrUtil.blankToDefault(userAccount, loginUser.getUserAccount());
         String safeAccount = accountForName.replaceAll("[^a-zA-Z0-9_\\-一-龥]", "_");
 
@@ -95,11 +106,12 @@ public class UserController {
 
         File targetFile = new File(uploadDir, fileName);
         try {
-            file.transferTo(targetFile);
+            file.transferTo(targetFile); // 保存文件
         } catch (IOException e) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "头像保存失败");
         }
 
+        // 构建头像访问URL
         String avatarUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort()
                 + request.getContextPath() + "/avatar/" + fileName;
         return ResultUtils.success(avatarUrl);
@@ -178,6 +190,13 @@ public class UserController {
         return ResultUtils.success(true);
     }
 
+    /**
+     * 用户更新个人信息
+     *
+     * @param userUpdateRequest
+     * @param request
+     * @return
+     */
     @PostMapping("/update/my")
     @AuthCheck
     public BaseResponse<LoginUserVO> updateMyUser(@RequestBody UserUpdateRequest userUpdateRequest, HttpServletRequest request) {
@@ -200,15 +219,52 @@ public class UserController {
     }
 
     @PostMapping("/list/page/vo")
-    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Page<UserVO>> listUserVOByPage(@RequestBody UserQueryRequest userQueryRequest) {
+    public BaseResponse<Page<UserVO>> listUserVOByPage(@RequestBody UserQueryRequest userQueryRequest,
+                                                       HttpServletRequest request) {
+        // 1. 校验请求参数不能为空
         ThrowUtils.throwIf(userQueryRequest == null, ErrorCode.PARAMS_ERROR);
+
+        // 2. 获取当前登录用户
+        User loginUser = userService.getLoginUser(request);
+
+        // 3. 获取当前登录用户角色
+        String userRole = loginUser.getUserRole();
+
+        // 4. 判断是否为管理员或项目经理
+        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(userRole);
+        boolean isManager = UserConstant.MANAGER_ROLE.equals(userRole);
+
+        // 5. 如果既不是管理员，也不是项目经理，则不允许访问该接口
+        ThrowUtils.throwIf(!isAdmin && !isManager, ErrorCode.NO_AUTH_ERROR);
+
+        // 6. 如果是项目经理，只允许查询自己部门的用户
+        if (isManager) {
+            ThrowUtils.throwIf(loginUser.getDepartmentId() == null, ErrorCode.NO_AUTH_ERROR, "当前项目经理未绑定部门");
+
+            // 强制把查询部门改成项目经理自己的部门，防止前端传其他部门 id 越权查询
+            userQueryRequest.setDepartmentId(loginUser.getDepartmentId());
+        }
+
+        // 7. 获取分页参数
         long pageNum = userQueryRequest.getPageNum();
         long pageSize = userQueryRequest.getPageSize();
-        Page<User> userPage = userService.page(Page.of(pageNum, pageSize), userService.getQueryWrapper(userQueryRequest));
+
+        // 8. 根据查询条件分页查询用户
+        Page<User> userPage = userService.page(
+                Page.of(pageNum, pageSize),
+                userService.getQueryWrapper(userQueryRequest)
+        );
+
+        // 9. 创建用户 VO 分页对象
         Page<UserVO> userVOPage = new Page<>(pageNum, pageSize, userPage.getTotalRow());
+
+        // 10. 将 User 实体列表转换成 UserVO 列表
         List<UserVO> userVOList = userService.getUserVOList(userPage.getRecords());
+
+        // 11. 设置分页 records
         userVOPage.setRecords(userVOList);
+
+        // 12. 返回统一响应结果
         return ResultUtils.success(userVOPage);
     }
 
@@ -221,6 +277,13 @@ public class UserController {
     public void exportUserExcel(UserQueryRequest userQueryRequest, HttpServletResponse response) {
         userService.exportUserExcel(userQueryRequest, response);
     }
+
+    /**
+     * 提取文件后缀，统一小写
+     *
+     * @param originalFilename
+     * @return
+     */
     private String getFileSuffix(String originalFilename) {
         if (StrUtil.isBlank(originalFilename) || !originalFilename.contains(".")) {
             return "";

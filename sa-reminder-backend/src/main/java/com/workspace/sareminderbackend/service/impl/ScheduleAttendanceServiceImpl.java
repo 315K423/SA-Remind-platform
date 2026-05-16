@@ -55,6 +55,13 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
     @Resource
     private UserService userService;
 
+    /**
+     *  根据任务进行签到
+     *
+     * @param request
+     * @param loginUser
+     * @return
+     */
     @Override
     public ScheduleAttendanceCheckInVO checkInByTask(ScheduleAttendanceCheckInRequest request, User loginUser) {
         if (request == null || request.getTaskId() == null || request.getTaskId() <= 0
@@ -65,6 +72,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
 
+        // 获取提醒任务
         ScheduleReminderTask task = scheduleReminderTaskMapper.selectOneById(request.getTaskId());
         if (task == null || (task.getIsDelete() != null && task.getIsDelete() == 1)) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "提醒任务不存在");
@@ -76,6 +84,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "当前提醒未处于待签到状态");
         }
 
+        // 获取日程
         ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(task.getScheduleId());
         if (scheduleEvent == null || (scheduleEvent.getIsDelete() != null && scheduleEvent.getIsDelete() == 1)) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "日程不存在");
@@ -84,6 +93,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "该日程未开启定位签到");
         }
 
+        // 获取参与者
         ScheduleParticipant participant = scheduleParticipantMapper.selectOneByQuery(QueryWrapper.create()
                 .eq("scheduleId", scheduleEvent.getId())
                 .eq("userId", loginUser.getId())
@@ -92,6 +102,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "你不是该日程参与人");
         }
 
+        // 计算距离
         double distanceMeters = calculateDistanceMeters(
                 request.getLatitude(),
                 request.getLongitude(),
@@ -104,6 +115,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
         result.setDistanceMeters(round(distanceMeters));
         result.setWithinRange(distanceMeters <= radiusMeters);
 
+        // 判断超出签到范围
         if (distanceMeters > radiusMeters) {
             result.setSuccess(false);
             result.setAttendanceStatus(
@@ -113,6 +125,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
             return result;
         }
 
+        // 跟新签到记录
         LocalDateTime now = LocalDateTime.now();
         ScheduleParticipant update = new ScheduleParticipant();
         update.setId(participant.getId());
@@ -133,11 +146,18 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
         return result;
     }
 
+    /**
+     *  分页查询考勤记录
+     *
+     * @param request
+     * @return
+     */
     @Override
     public Page<ScheduleAttendanceVO> listAttendancePage(ScheduleAttendanceQueryRequest request) {
         final ScheduleAttendanceQueryRequest finalRequest =
                 (request == null ? new ScheduleAttendanceQueryRequest() : request);
 
+        // 查询所有参与者记录
         List<ScheduleParticipant> participantList = scheduleParticipantMapper.selectListByQuery(
                 QueryWrapper.create().eq("isDelete", 0)
         );
@@ -147,6 +167,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
             return new Page<>(pageNum, pageSize, 0);
         }
 
+        // 构造AttendanceVO列表
         List<ScheduleAttendanceVO> allList = new ArrayList<>();
         for (ScheduleParticipant participant : participantList) {
             ScheduleEvent scheduleEvent = scheduleEventMapper.selectOneById(participant.getScheduleId());
@@ -178,6 +199,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
             allList.add(vo);
         }
 
+        // 根据条件过滤
         List<ScheduleAttendanceVO> filtered = allList.stream()
                 .filter(item -> finalRequest.getScheduleId() == null || Objects.equals(item.getScheduleId(), finalRequest.getScheduleId()))
                 .filter(item -> finalRequest.getUserId() == null || Objects.equals(item.getUserId(), finalRequest.getUserId()))
@@ -203,6 +225,12 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
         return page;
     }
 
+    /**
+     *  管理员修改考勤状态
+     *
+     * @param request
+     * @return
+     */
     @Override
     public boolean adminUpdateAttendanceStatus(ScheduleAttendanceUpdateRequest request) {
         if (request == null || request.getParticipantId() == null || request.getParticipantId() <= 0
@@ -234,17 +262,25 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
         return scheduleParticipantMapper.update(update) > 0;
     }
 
+    /**
+     *  分页查询考勤率
+     *
+     * @param request
+     * @return
+     */
     @Override
     public Page<ScheduleAttendanceRateVO> listAttendanceRatePage(ScheduleAttendanceQueryRequest request) {
         ScheduleAttendanceQueryRequest finalRequest =
                 request == null ? new ScheduleAttendanceQueryRequest() : request;
 
+        // 查询所有考勤事件
         List<ScheduleEvent> eventList = scheduleEventMapper.selectListByQuery(
                 QueryWrapper.create()
                         .eq("scheduleType", "attendance")
                         .eq("isDelete", 0)
         );
 
+        // 构建考勤率VO表
         List<ScheduleAttendanceRateVO> allList = Optional.ofNullable(eventList)
                 .orElse(new ArrayList<>())
                 .stream()
@@ -270,6 +306,12 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
         return page;
     }
 
+    /**
+     *  构建考勤率VO
+     *
+     * @param scheduleEvent
+     * @return
+     */
     private ScheduleAttendanceRateVO buildAttendanceRateVO(ScheduleEvent scheduleEvent) {
         List<ScheduleParticipant> participantList = scheduleParticipantMapper.selectListByQuery(
                 QueryWrapper.create()
@@ -297,6 +339,13 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
         return vo;
     }
 
+    /**
+     *  计算考勤率
+     *
+     * @param numerator
+     * @param denominator
+     * @return
+     */
     private Double calculateRate(int numerator, int denominator) {
         if (denominator <= 0) {
             return 0D;
@@ -312,6 +361,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
                 && scheduleEvent.getCheckInLongitude() != null;
     }
 
+    // 使用Haversin公式计算距离
     private double calculateDistanceMeters(double lat1, double lng1, double lat2, double lng2) {
         double earthRadius = 6371000D;
         double dLat = Math.toRadians(lat2 - lat1);
@@ -323,6 +373,7 @@ public class ScheduleAttendanceServiceImpl implements ScheduleAttendanceService 
         return earthRadius * c;
     }
 
+    // 保留两位小数
     private double round(double value) {
         return Math.round(value * 100D) / 100D;
     }

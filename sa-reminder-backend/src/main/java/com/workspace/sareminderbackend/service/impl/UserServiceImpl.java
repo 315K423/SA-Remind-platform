@@ -61,7 +61,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (count > 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户已存在");
         }
+
+        // 密码加密
         String encryptPassword = getEncryptPassword(userPassword);
+
+        // 构建用户实体
         User user = new User();
         user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
@@ -77,6 +81,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return user.getId();
     }
 
+    /**
+     * 将user实体转化为过滤后的loginUserVO
+     *
+     * @param user
+     * @return
+     */
     @Override
     public LoginUserVO getLoginUserVO(User user) {
         if (user == null) {
@@ -107,12 +117,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
         }
+
+        // 存入session
         request.getSession().setAttribute(USER_LOGIN_STATE, user);
         return this.getLoginUserVO(user);
     }
 
+    /**
+     * 获取当前登录用户信息
+     *
+     * @param request
+     * @return
+     */
     @Override
     public User getLoginUser(HttpServletRequest request) {
+        // todo
         Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
         User currentUser = (User) userObj;
         if (currentUser == null || currentUser.getId() == null) {
@@ -169,6 +188,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .orderBy(userQueryRequest.getSortField(), "ascend".equals(userQueryRequest.getSortOrder()));
     }
 
+    /**
+     *  密码加密
+     *
+     * @param userPassword
+     * @return
+     */
     @Override
     public String getEncryptPassword(String userPassword) {
         final String SALT = "aicode";
@@ -183,6 +208,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return this.list(QueryWrapper.create().eq("departmentId", departmentId));
     }
 
+    /**
+     *  验证用户是否属于指定部门
+     *
+     * @param user
+     * @param departmentId
+     */
     @Override
     public void validateDepartmentUser(User user, Long departmentId) {
         if (user == null || user.getId() == null) {
@@ -203,6 +234,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return UserRoleEnum.MANAGER.equals(UserRoleEnum.getEnumByValue(user.getUserRole()));
     }
 
+    /**
+     *  导出excel表
+     *
+     * @param userQueryRequest 查询条件，和用户管理列表保持一致
+     * @param response         HTTP 响应，用于输出 xlsx 文件流
+     */
     @Override
     public void exportUserExcel(UserQueryRequest userQueryRequest, HttpServletResponse response) {
         UserQueryRequest finalRequest = userQueryRequest == null ? new UserQueryRequest() : userQueryRequest;
@@ -224,6 +261,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 cell.setCellStyle(headerStyle);
             }
 
+            // 填充用户数据
             for (int i = 0; i < userVOList.size(); i++) {
                 UserVO userVO = userVOList.get(i);
                 Row row = sheet.createRow(i + 1);
@@ -236,10 +274,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 row.createCell(6).setCellValue(userVO.getCreateTime() == null ? "" : userVO.getCreateTime().toString().replace("T", " "));
             }
 
+            // 自动调整列宽
             for (int i = 0; i < headers.length; i++) {
                 sheet.autoSizeColumn(i);
             }
 
+            // 设置响应头和文件名
             String fileName = URLEncoder.encode("用户数据_" + LocalDate.now() + ".xlsx", StandardCharsets.UTF_8)
                     .replace("+", "%20");
             response.setCharacterEncoding("UTF-8");
@@ -255,6 +295,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return StrUtil.isBlank(value) ? "-" : value;
     }
 
+    /**
+     *  填充部门信息到UserVO或者loginUserVO
+     *
+     * @param departmentId
+     * @param target
+     */
     private void fillDepartmentInfo(Long departmentId, Object target) {
         if (departmentId == null) {
             return;

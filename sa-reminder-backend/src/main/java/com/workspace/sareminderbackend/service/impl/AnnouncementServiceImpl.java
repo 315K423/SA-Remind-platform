@@ -31,15 +31,22 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * AnnouncementServiceImpl
+ * 公告业务逻辑实现类，实现 AnnouncementService 接口
+ * 负责公告的新增、修改、删除、查询及阅读状态管理
+ */
 @Service
 public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Announcement> implements AnnouncementService {
 
-    private static final String SCOPE_ALL = "all";
-    private static final String SCOPE_DEPARTMENT = "department";
-    private static final String STATUS_PUBLISHED = "published";
-    private static final String RECEIVE_UNREAD = "unread";
-    private static final String RECEIVE_READ = "read";
+    // 公告作用范围类型常量
+    private static final String SCOPE_ALL = "all"; // 全公司
+    private static final String SCOPE_DEPARTMENT = "department"; // 部门
+    private static final String STATUS_PUBLISHED = "published"; // 已发布状态
+    private static final String RECEIVE_UNREAD = "unread"; // 未读状态
+    private static final String RECEIVE_READ = "read"; // 已读状态
 
+    // 注入 mapper 与服务
     @Resource
     private AnnouncementDepartmentMapper announcementDepartmentMapper;
 
@@ -52,45 +59,61 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
     @Resource
     private DepartmentService departmentService;
 
+    /**
+     * 新增公告
+     * @param request 前端传入的公告新增请求对象
+     * @param loginUser 当前登录用户对象
+     * @return 新增公告的 ID
+     */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class) // 事务回滚处理
     public long addAnnouncement(AnnouncementAddRequest request, User loginUser) {
+        // 校验公告请求参数合法性
         validateRequest(request.getTitle(), request.getContent(), request.getScopeType(), request.getDepartmentIdList());
 
+        // 创建公告实体对象
         Announcement announcement = new Announcement();
-        BeanUtil.copyProperties(request, announcement);
+        BeanUtil.copyProperties(request, announcement); // 将 DTO 属性复制到实体
 
-        LocalDateTime now = LocalDateTime.now();
-        announcement.setPublisherId(loginUser.getId());
-        // AddRequest 当前没有 status 字段，这里直接默认发布
-        announcement.setStatus(STATUS_PUBLISHED);
+        LocalDateTime now = LocalDateTime.now(); // 当前时间
+        announcement.setPublisherId(loginUser.getId()); // 发布人
+        announcement.setStatus(STATUS_PUBLISHED); // AddRequest 当前没有 status 字段，这里直接默认发布
         announcement.setPublishTime(now);
         announcement.setCreateTime(now);
         announcement.setUpdateTime(now);
-        announcement.setIsDelete(0);
+        announcement.setIsDelete(0); // 未删除标志
 
+        // 保存公告到数据库
         boolean ok = this.save(announcement);
         if (!ok) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "新增公告失败");
         }
 
-        // 只同步部门关系，不再生成未读快照
+        // 同步公告-部门关系（仅同步关系，不生成未读快照）
         syncDepartmentRelations(announcement.getId(), request.getScopeType(), request.getDepartmentIdList());
         return announcement.getId();
     }
 
+    /**
+     * 更新公告
+     * @param request 前端传入的公告更新请求对象
+     * @param loginUser 当前登录用户
+     * @return 是否更新成功
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean updateAnnouncement(AnnouncementUpdateRequest request, User loginUser) {
+        // 参数合法性校验
         if (request == null || request.getId() == null || request.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "公告 id 非法");
         }
 
-        Announcement old = this.getById(request.getId());
+        Announcement old = this.getById(request.getId()); // 查询旧公告
         if (old == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "公告不存在");
         }
 
+        // 获取更新后的字段，若为空则使用旧值
         String finalTitle = StrUtil.blankToDefault(request.getTitle(), old.getTitle());
         String finalContent = StrUtil.blankToDefault(request.getContent(), old.getContent());
         String finalScopeType = StrUtil.blankToDefault(request.getScopeType(), old.getScopeType());
@@ -98,14 +121,16 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
                 ? getDepartmentIds(old.getId())
                 : request.getDepartmentIdList();
 
+        // 校验更新后的请求合法性
         validateRequest(finalTitle, finalContent, finalScopeType, finalDepartmentIdList);
 
+        // 创建更新对象
         Announcement update = new Announcement();
         BeanUtil.copyProperties(request, update);
         update.setId(old.getId());
         update.setUpdateTime(LocalDateTime.now());
 
-        boolean ok = this.updateById(update);
+        boolean ok = this.updateById(update); // 执行更新
         if (!ok) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新公告失败");
         }
@@ -115,18 +140,30 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return true;
     }
 
+    /**
+     * 删除公告
+     * @param id 公告ID
+     * @return 是否删除成功
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean deleteAnnouncement(long id) {
+        // 删除公告-部门关系
         announcementDepartmentMapper.deleteByQuery(
                 QueryWrapper.create().eq("announcementId", id)
         );
+        // 删除公告-接收人关系
         announcementReceiverMapper.deleteByQuery(
                 QueryWrapper.create().eq("announcementId", id)
         );
-        return this.removeById(id);
+        return this.removeById(id); // 删除公告记录
     }
 
+    /**
+     * 构建查询条件
+     * @param request 查询请求对象
+     * @return QueryWrapper 条件构造对象
+     */
     @Override
     public QueryWrapper getQueryWrapper(AnnouncementQueryRequest request) {
         QueryWrapper wrapper = QueryWrapper.create()
@@ -135,6 +172,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
                 .eq("scopeType", request.getScopeType())
                 .eq("status", request.getStatus());
 
+        // 根据部门筛选
         if (request.getDepartmentId() != null) {
             QueryWrapper subQuery = QueryWrapper.create()
                     .select("announcementId")
@@ -144,14 +182,21 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
             wrapper.in("id", subQuery);
         }
 
+        // 排序处理
         if (StrUtil.isNotBlank(request.getSortField())) {
             wrapper.orderBy(request.getSortField(), "ascend".equals(request.getSortOrder()));
         } else {
-            wrapper.orderBy("publishTime", false);
+            wrapper.orderBy("publishTime", false); // 默认按发布时间倒序
         }
         return wrapper;
     }
 
+    /**
+     * 构建单条公告 VO 对象（前端展示对象）
+     * @param announcement 公告实体
+     * @param loginUser 当前登录用户
+     * @return AnnouncementVO 前端展示对象
+     */
     @Override
     public AnnouncementVO getAnnouncementVO(Announcement announcement, User loginUser) {
         if (announcement == null) {
@@ -182,6 +227,9 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return vo;
     }
 
+    /**
+     * 构建公告列表 VO
+     */
     @Override
     public List<AnnouncementVO> getAnnouncementVOList(List<Announcement> list, User loginUser) {
         if (CollUtil.isEmpty(list)) {
@@ -220,6 +268,9 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return result;
     }
 
+    /**
+     * 列出当前用户可见的公告列表
+     */
     @Override
     public List<AnnouncementVO> listMyAnnouncements(User loginUser) {
         if (loginUser == null || loginUser.getId() == null) {
@@ -238,6 +289,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
             return new ArrayList<>();
         }
 
+        // 根据公告作用范围过滤
         List<Announcement> filteredList = publishedAnnouncements.stream()
                 .filter(announcement -> canUserAccessAnnouncement(announcement, loginUser))
                 .collect(Collectors.toList());
@@ -245,6 +297,9 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return getAnnouncementVOList(filteredList, loginUser);
     }
 
+    /**
+     * 标记公告为已读
+     */
     @Override
     public boolean readAnnouncement(long announcementId, User loginUser) {
         if (announcementId <= 0) {
@@ -275,6 +330,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         LocalDateTime now = LocalDateTime.now();
 
         if (receiver == null) {
+            // 插入新已读记录
             AnnouncementReceiver newReceiver = new AnnouncementReceiver();
             newReceiver.setAnnouncementId(announcementId);
             newReceiver.setUserId(loginUser.getId());
@@ -286,6 +342,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
             return announcementReceiverMapper.insert(newReceiver) > 0;
         }
 
+        // 更新已读记录
         AnnouncementReceiver update = new AnnouncementReceiver();
         update.setId(receiver.getId());
         update.setReceiveStatus(RECEIVE_READ);
@@ -295,6 +352,9 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return announcementReceiverMapper.update(update) > 0;
     }
 
+    /**
+     * 后台分页查询公告阅读率
+     */
     @Override
     public Page<AnnouncementReadRateVO> listReadRatePage(AnnouncementQueryRequest request) {
         AnnouncementQueryRequest finalRequest = request == null ? new AnnouncementQueryRequest() : request;
@@ -312,7 +372,11 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return voPage;
     }
 
+    /**
+     * 构建单条公告阅读率 VO
+     */
     private AnnouncementReadRateVO buildReadRateVO(Announcement announcement, List<User> userList) {
+        // 筛选有权限查看公告的用户
         List<User> receiverUserList = Optional.ofNullable(userList)
                 .orElse(Collections.emptyList())
                 .stream()
@@ -364,11 +428,14 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return vo;
     }
 
+    /**
+     * 计算阅读率
+     */
     private Double calculateRate(int numerator, int denominator) {
         if (denominator <= 0) {
             return 0D;
         }
-        return Math.round(numerator * 10000D / denominator) / 100D;
+        return Math.round(numerator * 10000D / denominator) / 100D; // 保留两位小数
     }
 
     /**
@@ -411,6 +478,7 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
      * 只同步公告-部门关系，不再生成接收人快照
      */
     private void syncDepartmentRelations(Long announcementId, String scopeType, List<Long> departmentIdList) {
+        // 先物理删除旧关系
         announcementDepartmentMapper.deleteByAnnouncementIdPhysically(announcementId);
 
         if (SCOPE_ALL.equals(scopeType)) {
@@ -438,6 +506,9 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         }
     }
 
+    /**
+     * 构建公告-部门 map
+     */
     private Map<Long, List<Long>> buildAnnouncementDepartmentMap(List<Long> announcementIds) {
         Map<Long, List<Long>> result = new HashMap<>();
         if (CollUtil.isEmpty(announcementIds)) {
@@ -480,6 +551,9 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
         return result;
     }
 
+    /**
+     * 获取公告对应部门列表
+     */
     private List<Long> getDepartmentIds(Long announcementId) {
         List<AnnouncementDepartment> relationList = announcementDepartmentMapper.selectListByQuery(
                 QueryWrapper.create()
@@ -491,6 +565,9 @@ public class AnnouncementServiceImpl extends ServiceImpl<AnnouncementMapper, Ann
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 校验公告请求合法性
+     */
     private void validateRequest(String title, String content, String scopeType, List<Long> departmentIdList) {
         if (StrUtil.hasBlank(title, content, scopeType)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "公告标题、内容、范围不能为空");

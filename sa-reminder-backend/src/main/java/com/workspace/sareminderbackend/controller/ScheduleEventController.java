@@ -89,6 +89,13 @@ public class ScheduleEventController {
         return ResultUtils.success(voPage);
     }
 
+    /**
+     * 查询当前用户当月日程
+     *
+     * @param request
+     * @param httpServletRequest
+     * @return
+     */
     @PostMapping("/my/month")
     @AuthCheck
     public BaseResponse<List<ScheduleEventVO>> listMyMonth(@RequestBody ScheduleCalendarQueryRequest request,
@@ -98,6 +105,13 @@ public class ScheduleEventController {
         return ResultUtils.success(scheduleEventService.listMyMonthSchedule(request.getYear(), request.getMonth(), loginUser));
     }
 
+    /**
+     * 查询当前用户某一天日程
+     *
+     * @param date
+     * @param httpServletRequest
+     * @return
+     */
     @GetMapping("/my/day")
     @AuthCheck
     public BaseResponse<ScheduleCalendarDayVO> getMyDay(@RequestParam("date") String date,
