@@ -1,0 +1,24 @@
+# 将系统截图放置于此目录，文件名需与 README.md 中的引用路径一致：
+#
+# 用户端:
+#   login.png               - 登录页面
+#   register.png            - 注册页面
+#   home.png                - 工作台首页
+#   user-profile.png        - 个人中心
+#   schedule-calendar.png   - 日程月视图
+#   schedule-day.png        - 日程日视图
+#   schedule-manage.png     - 日程管理（创建/编辑）
+#   schedule-conflict.png   - 时间冲突检测弹窗
+#   reminder-rule.png       - 提醒规则管理
+#   reminder-popup.png      - 全局提醒弹窗
+#   announcement-list.png   - 公告列表（普通用户视角）
+#
+# 管理端:
+#   user-manage.png         - 用户管理
+#   department-manage.png   - 部门管理
+#   department-import.png   - 批量导入员工
+#   announcement-manage.png - 公告管理
+#   announcement-read-rate.png - 公告阅读率统计
+#   attendance-manage.png   - 考勤管理
+#   attendance-rate.png     - 出勤率统计
+#   checkin.png             - GPS 打卡
